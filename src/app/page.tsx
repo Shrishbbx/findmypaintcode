@@ -89,7 +89,7 @@ export default function Home() {
         ) : (
           /* Chat Interface */
           <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-8">
-            <div className="w-full max-w-2xl">
+            <div className="w-full max-w-4xl">
               <ChatContainer />
             </div>
           </div>

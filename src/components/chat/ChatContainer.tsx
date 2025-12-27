@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChatMessage as ChatMessageType, ChatOption } from '@/types';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
@@ -21,6 +21,10 @@ const getWelcomeMessage = (): ChatMessageType => ({
 interface ChatHistoryItem {
   id: string;
   preview: string;
+  timestamp: Date;
+  messages: ChatMessageType[];
+  conversationHistory: ConversationMessage[];
+  detectedInfo: DetectedInfo;
 }
 
 interface ConversationMessage {
@@ -36,6 +40,40 @@ interface DetectedInfo {
   colorName?: string | null;
 }
 
+const STORAGE_KEY = 'findmypaintcode_chats';
+
+// Load chats from localStorage
+const loadChats = (): ChatHistoryItem[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return parsed.map((chat: ChatHistoryItem) => ({
+        ...chat,
+        timestamp: new Date(chat.timestamp),
+        messages: chat.messages.map((m: ChatMessageType) => ({
+          ...m,
+          timestamp: new Date(m.timestamp),
+        })),
+      }));
+    }
+  } catch (e) {
+    console.error('Failed to load chats:', e);
+  }
+  return [];
+};
+
+// Save chats to localStorage
+const saveChats = (chats: ChatHistoryItem[]) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(chats));
+  } catch (e) {
+    console.error('Failed to save chats:', e);
+  }
+};
+
 export function ChatContainer() {
   const [messages, setMessages] = useState<ChatMessageType[]>([getWelcomeMessage()]);
   const [isTyping, setIsTyping] = useState(false);
@@ -44,29 +82,61 @@ export function ChatContainer() {
   const [currentOptions, setCurrentOptions] = useState<ChatOption[]>([]);
   const [imageAnalysis, setImageAnalysis] = useState<unknown>(null);
 
-  const [chatHistory] = useState<ChatHistoryItem[]>([
-    { id: 'chat-1', preview: 'Previous chat...' },
-  ]);
-  const [currentChatId, setCurrentChatId] = useState<string | null>('new');
+  const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Handle responsive sidebar - open by default on large screens
+  // Load chats on mount
   useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth >= 1024) {
-        setSidebarOpen(true);
-      }
-    };
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    const loaded = loadChats();
+    setChatHistory(loaded);
   }, []);
 
+  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Save current chat to history
+  const saveCurrentChat = useCallback(() => {
+    if (!currentChatId || messages.length <= 1) return;
+
+    const firstUserMessage = messages.find(m => m.type === 'user');
+    const preview = firstUserMessage?.content.slice(0, 50) || 'New conversation';
+
+    setChatHistory(prev => {
+      const existingIndex = prev.findIndex(c => c.id === currentChatId);
+      const updatedChat: ChatHistoryItem = {
+        id: currentChatId,
+        preview: preview + (preview.length >= 50 ? '...' : ''),
+        timestamp: new Date(),
+        messages,
+        conversationHistory,
+        detectedInfo,
+      };
+
+      let newHistory;
+      if (existingIndex >= 0) {
+        newHistory = [...prev];
+        newHistory[existingIndex] = updatedChat;
+      } else {
+        newHistory = [updatedChat, ...prev];
+      }
+
+      saveChats(newHistory);
+      return newHistory;
+    });
+  }, [currentChatId, messages, conversationHistory, detectedInfo]);
+
+  // Save chat when messages change (debounced effect)
+  useEffect(() => {
+    if (currentChatId && messages.length > 1) {
+      const timeout = setTimeout(saveCurrentChat, 500);
+      return () => clearTimeout(timeout);
+    }
+  }, [messages, currentChatId, saveCurrentChat]);
 
   const addBotMessage = (content: string, options?: ChatOption[]) => {
     setMessages(prev => [
@@ -87,6 +157,11 @@ export function ChatContainer() {
   };
 
   const addUserMessage = (content: string, imageUrl?: string) => {
+    // Create new chat if this is first user message
+    if (!currentChatId) {
+      setCurrentChatId(`chat-${generateId()}`);
+    }
+
     setMessages(prev => [
       ...prev,
       {
@@ -149,7 +224,6 @@ export function ChatContainer() {
 
         // Handle actions
         if (aiResponse.action === 'show_result' && detectedInfo.paintCode) {
-          // Could navigate to result page
           const url = `/paint-code/${detectedInfo.brand?.toLowerCase()}/${detectedInfo.model?.toLowerCase().replace(/\s+/g, '-')}/${detectedInfo.year}/${detectedInfo.paintCode?.toLowerCase().replace(/\s+/g, '-')}`;
           addBotMessage(`Great! I found your paint code. [View your paint options](${url})`);
         }
@@ -170,7 +244,6 @@ export function ChatContainer() {
     addBotMessage("Analyzing your car photo... This may take a moment.");
 
     try {
-      // Extract mimeType from data URL (e.g., "data:image/png;base64,...")
       const mimeTypeMatch = imageDataUrl.match(/^data:([^;]+);/);
       const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
 
@@ -189,7 +262,6 @@ export function ChatContainer() {
         const analysis = data.analysis;
         setImageAnalysis(analysis);
 
-        // Update detected info from image analysis
         if (analysis.make) {
           setDetectedInfo(prev => ({
             ...prev,
@@ -198,7 +270,6 @@ export function ChatContainer() {
           }));
         }
 
-        // Build response message
         let message = "Here's what I found from your photo:\n\n";
 
         if (analysis.make && analysis.model) {
@@ -231,7 +302,6 @@ export function ChatContainer() {
 
         addBotMessage(message, options);
 
-        // Add to conversation history
         setConversationHistory(prev => [
           ...prev,
           { role: 'user', content: `[User uploaded a car photo]` },
@@ -276,27 +346,53 @@ export function ChatContainer() {
     sendToChat(option.label);
   };
 
-  const resetChat = () => {
+  const startNewChat = () => {
     setMessages([getWelcomeMessage()]);
     setConversationHistory([]);
     setDetectedInfo({});
     setCurrentOptions([]);
     setImageAnalysis(null);
+    setCurrentChatId(null);
   };
 
   const handleNewChat = () => {
-    resetChat();
-    setCurrentChatId(`chat-${generateId()}`);
+    saveCurrentChat();
+    startNewChat();
   };
 
   const handleSelectChat = (id: string) => {
-    setCurrentChatId(id);
+    // Save current chat first
+    saveCurrentChat();
+
+    // Load selected chat
+    const chat = chatHistory.find(c => c.id === id);
+    if (chat) {
+      setMessages(chat.messages);
+      setConversationHistory(chat.conversationHistory);
+      setDetectedInfo(chat.detectedInfo);
+      setCurrentChatId(id);
+      setCurrentOptions([]);
+      setImageAnalysis(null);
+    }
+  };
+
+  const handleDeleteChat = (id: string) => {
+    setChatHistory(prev => {
+      const newHistory = prev.filter(c => c.id !== id);
+      saveChats(newHistory);
+      return newHistory;
+    });
+
+    // If deleting current chat, start new one
+    if (id === currentChatId) {
+      startNewChat();
+    }
   };
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
   return (
-    <div className="relative flex h-[600px] sm:h-[650px] md:h-[700px] bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
+    <div className="flex h-[700px] bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
       {/* Sidebar */}
       <ChatSidebar
         chatHistory={chatHistory}
@@ -305,6 +401,7 @@ export function ChatContainer() {
         onToggle={toggleSidebar}
         onNewChat={handleNewChat}
         onSelectChat={handleSelectChat}
+        onDeleteChat={handleDeleteChat}
       />
 
       {/* Main chat area */}
