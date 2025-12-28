@@ -10,6 +10,12 @@ export interface PaintCode {
     amazon?: string;
     walmart?: string;
   };
+  // ERA Paints product data (from CSV)
+  eraProduct?: {
+    asin?: string; // Amazon ASIN
+    productName?: string; // Full product name
+    price?: string; // e.g., "$17.99"
+  };
 }
 
 export interface CarModel {

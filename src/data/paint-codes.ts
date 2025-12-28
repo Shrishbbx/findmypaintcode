@@ -89,6 +89,32 @@ export const carBrands: CarBrand[] = [
     ]
   },
   {
+    name: 'Acura',
+    slug: 'acura',
+    codeLocations: [
+      'Driver side door jamb',
+      'Inside the driver door frame'
+    ],
+    models: [
+      {
+        name: 'NSX',
+        years: [2020, 2021, 2022, 2023, 2024],
+        codeLocations: ['Driver side door jamb - look for a sticker with the paint code'],
+        paintCodes: [
+          {
+            code: 'YR506M',
+            name: 'Desert Mist Metallic',
+            hex: '#D4C5B0',
+            purchaseLinks: {
+              erapaints: 'https://www.amazon.com/dp/B09GRYMGSN',
+              amazon: 'https://www.amazon.com/dp/B09GRYMGSN'
+            }
+          },
+        ]
+      }
+    ]
+  },
+  {
     name: 'Ford',
     slug: 'ford',
     codeLocations: [

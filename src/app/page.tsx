@@ -70,38 +70,69 @@ export default function Home() {
 
             {/* How it Works Section */}
             <div id="how-it-works" className="w-full max-w-5xl mx-auto mt-24 mb-16">
-              <h2 className="text-2xl font-bold text-gray-900 text-center mb-12">How it Works</h2>
+              <div className="text-center mb-14">
+                <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3">
+                  Three simple steps to perfect paint
+                </h2>
+                <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+                  No guesswork. No expensive trips to the dealership. Just the exact color you need.
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {/* Step 1 */}
-                <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
-                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-5">
-                    <span className="text-xl font-bold text-blue-600">1</span>
+                {/* Step 1 - Camera/Photo */}
+                <div className="bg-gradient-to-br from-blue-50/40 to-indigo-50/40 rounded-2xl p-8 shadow-sm border border-blue-100/50 hover:shadow-lg transition-shadow group">
+                  <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-6 shadow-sm group-hover:scale-110 transition-transform">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-9 h-9 text-blue-600">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                      <circle cx="12" cy="13" r="4"></circle>
+                    </svg>
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Tell Us Your Car</h3>
-                  <p className="text-gray-600">
-                    Select your make, model, and year — or upload a photo and let AI identify it.
+                  <div className="inline-flex items-center gap-2 mb-3">
+                    <span className="text-sm font-bold text-blue-600 bg-blue-100 px-2.5 py-1 rounded-full">STEP 1</span>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-3">Click an image of your color</h3>
+                  <p className="text-gray-700 leading-relaxed">
+                    Snap a quick photo of your car&apos;s paint. Our AI instantly recognizes your vehicle&apos;s exact shade—even in different lighting.
                   </p>
                 </div>
 
-                {/* Step 2 */}
-                <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
-                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-5">
-                    <span className="text-xl font-bold text-blue-600">2</span>
+                {/* Step 2 - AI/Discovery */}
+                <div className="bg-gradient-to-br from-purple-50/40 to-pink-50/40 rounded-2xl p-8 shadow-sm border border-purple-100/50 hover:shadow-lg transition-shadow group">
+                  <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-6 shadow-sm group-hover:scale-110 transition-transform">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-9 h-9 text-purple-600">
+                      <circle cx="11" cy="11" r="8"></circle>
+                      <path d="m21 21-4.35-4.35"></path>
+                      <path d="M11 8a3 3 0 0 0-3 3"></path>
+                      <circle cx="8" cy="14" r="1" fill="currentColor"></circle>
+                      <circle cx="14" cy="14" r="1" fill="currentColor"></circle>
+                    </svg>
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Find Your Color</h3>
-                  <p className="text-gray-600">
-                    We&apos;ll show you exactly where to find the paint code on your vehicle.
+                  <div className="inline-flex items-center gap-2 mb-3">
+                    <span className="text-sm font-bold text-purple-600 bg-purple-100 px-2.5 py-1 rounded-full">STEP 2</span>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-3">We find your color</h3>
+                  <p className="text-gray-700 leading-relaxed">
+                    Our AI scans thousands of paint codes in milliseconds to match your car&apos;s factory finish. Then we show you exactly where to locate it.
                   </p>
                 </div>
 
-                {/* Step 3 */}
-                <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
-                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-5">
-                    <span className="text-xl font-bold text-blue-600">3</span>
+                {/* Step 3 - Paint/Success */}
+                <div className="bg-gradient-to-br from-green-50/40 to-emerald-50/40 rounded-2xl p-8 shadow-sm border border-green-100/50 hover:shadow-lg transition-shadow group">
+                  <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-6 shadow-sm group-hover:scale-110 transition-transform">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-9 h-9 text-green-600">
+                      <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+                      <circle cx="12" cy="12" r="3" fill="currentColor" opacity="0.3"></circle>
+                      <path d="m8 16 1.5-1.5"></path>
+                      <path d="M14.5 9.5 16 8"></path>
+                    </svg>
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Get Your Paint</h3>
-                  <p className="text-gray-600">
-                    Order the exact matching touch-up paint from trusted retailers.
+                  <div className="inline-flex items-center gap-2 mb-3">
+                    <span className="text-sm font-bold text-green-600 bg-green-100 px-2.5 py-1 rounded-full">STEP 3</span>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-3">You get your final paint</h3>
+                  <p className="text-gray-700 leading-relaxed">
+                    Order professional-grade touch-up paint from trusted suppliers. Perfect color match guaranteed—no more touch-ups that don&apos;t match.
                   </p>
                 </div>
               </div>
@@ -119,7 +150,17 @@ export default function Home() {
 
       {/* Footer */}
       <footer id="support" className="py-8 text-center text-sm text-gray-500 border-t border-gray-100 bg-white">
-        <p>Powered by <span className="font-semibold text-gray-700">ERAPAINTS</span></p>
+        <p>
+          Powered by{' '}
+          <a
+            href="https://erapaints.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-gray-700 hover:text-blue-600 transition-colors underline-offset-2 hover:underline"
+          >
+            ERAPAINTS
+          </a>
+        </p>
       </footer>
     </div>
   );
