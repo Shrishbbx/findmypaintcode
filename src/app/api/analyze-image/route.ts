@@ -1,7 +1,15 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+// OpenRouter client (uses OpenAI SDK format)
+const openrouter = new OpenAI({
+  baseURL: 'https://openrouter.ai/api/v1',
+  apiKey: process.env.OPENROUTER_API_KEY || '',
+  defaultHeaders: {
+    'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
+    'X-Title': 'FindMyPaintCode',
+  },
+});
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,9 +19,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No image provided' }, { status: 400 });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
-    const prompt = `You are a helpful automotive paint expert. Analyze this car photo carefully.
+    // Use NVIDIA Nemotron model - excellent for OCR and visual analysis
+    const completion = await openrouter.chat.completions.create({
+      model: 'nvidia/nemotron-nano-12b-v2-vl:free',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: {
+                url: image, // Full data URL with base64
+              },
+            },
+            {
+              type: 'text',
+              text: `You are a helpful automotive paint expert. Analyze this car photo carefully.
 
 Your job is to identify the vehicle and color to help the user find their paint code.
 
@@ -36,20 +57,16 @@ Respond in JSON format:
   "possiblePaintCodes": ["string"],
   "confidence": "high|medium|low",
   "additionalInfo": "string"
-}`;
+}`,
+            },
+          ],
+        },
+      ],
+      // TODO: Uncomment when using paid models (GPT-4, Claude, Gemini)
+      // response_format: { type: 'json_object' },
+    });
 
-    const result = await model.generateContent([
-      prompt,
-      {
-        inlineData: {
-          mimeType: mimeType || 'image/jpeg',
-          data: image.split(',')[1] // Remove data URL prefix
-        }
-      }
-    ]);
-
-    const response = await result.response;
-    const text = response.text();
+    const text = completion.choices[0]?.message?.content || '';
 
     // Try to parse JSON from response
     let parsedResponse;
@@ -72,7 +89,7 @@ Respond in JSON format:
     });
 
   } catch (error) {
-    console.error('Gemini API error:', error);
+    console.error('OpenRouter API error:', error);
     return NextResponse.json(
       { error: 'Failed to analyze image', details: String(error) },
       { status: 500 }

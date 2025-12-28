@@ -1,25 +1,46 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Header } from '@/components/ui/Header';
 import { ChatContainer } from '@/components/chat';
+import { Loading } from '@/components/ui/Loading';
 
 export default function Home() {
   const [showChat, setShowChat] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // Show loading animation for 3.5 seconds on initial load
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 3500);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (isLoading) {
+    return <Loading />;
+  }
 
   return (
     <div className="min-h-screen bg-white">
       <Header showBack={showChat} onBack={() => setShowChat(false)} />
-      
+
       <main className="pt-16">
         {!showChat ? (
           /* Landing Page */
           <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center px-6">
             <div className="text-center max-w-3xl mx-auto">
-              {/* Badge */}
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-100 rounded-full mb-8">
-                <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
-                <span className="text-sm font-medium text-blue-700">AI-Powered Color Matching</span>
+              {/* Badges */}
+              <div className="inline-flex items-center gap-3 mb-8 mt-6">
+                <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-100 rounded-full">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+                  <span className="text-sm font-medium text-blue-700">AI-Powered Color Matching</span>
+                </div>
+                <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-100 rounded-full">
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                  <span className="text-sm font-medium text-green-700">100% Free</span>
+                </div>
               </div>
 
               {/* Headline */}

@@ -1,7 +1,22 @@
+import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextRequest, NextResponse } from 'next/server';
 import { carBrands } from '@/data/paint-codes';
 
+// Hybrid approach: Use web search when needed, otherwise use free unlimited OpenRouter
+const USE_WEB_SEARCH = process.env.USE_WEB_SEARCH === 'true';
+
+// OpenRouter client (free, unlimited, no web search)
+const openrouter = new OpenAI({
+  baseURL: 'https://openrouter.ai/api/v1',
+  apiKey: process.env.OPENROUTER_API_KEY || '',
+  defaultHeaders: {
+    'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
+    'X-Title': 'FindMyPaintCode',
+  },
+});
+
+// Gemini client (limited free tier, but has Google Search)
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 // Build paint database context for the AI
@@ -40,12 +55,9 @@ SMART APPROACH:
 - Combine questions naturally when needed ("What year and color?")
 - Aim for 2-3 exchanges MAX to reach the result
 
-WEB SEARCH - USE IT!
-- You have access to Google Search - USE IT to find accurate information
-- Search for the EXACT paint code location for their specific vehicle (e.g., "2020 Honda Civic paint code location")
-- Search for paint code formats and what to look for on the sticker
-- Search for common paint colors for that year/make/model if user describes a color
-- Always provide SPECIFIC, accurate location instructions based on search results
+WEB SEARCH - USE IT WHEN AVAILABLE!
+- You ${USE_WEB_SEARCH ? 'HAVE' : 'DO NOT have'} access to Google Search
+${USE_WEB_SEARCH ? '- Search for the EXACT paint code location for their specific vehicle (e.g., "2020 Honda Civic paint code location")\n- Search for paint code formats and what to look for on the sticker\n- Search for common paint colors for that year/make/model if user describes a color\n- Always provide SPECIFIC, accurate location instructions based on search results' : '- Use your automotive knowledge to help locate paint codes\n- Common locations: driver\'s side door jamb, glove box, trunk lid\n- Paint code stickers often labeled with "C/TR", "PAINT", "COLOR", or manufacturer codes'}
 
 WHEN YOU FIND THE PAINT CODE:
 - Share the code and color name with confidence
@@ -54,15 +66,13 @@ WHEN YOU FIND THE PAINT CODE:
 - Offer to show paint purchasing options
 
 IF NOT IN DATABASE:
-- Search the web for paint codes for that vehicle
-- Use your automotive knowledge combined with search results
-- Always be helpful - never just say "I don't know"
-- Give them specific guidance on where and how to find the code themselves
+- Use your automotive knowledge to suggest likely paint codes
+- Give them specific guidance on where and how to find the code themselves based on common locations for that brand
 
 RESPONSE FORMAT:
-Always respond with JSON:
+Always respond with ONLY valid JSON (no markdown, no code blocks):
 {
-  "message": "Your short, friendly response with specific details from web search",
+  "message": "Your short, friendly response",
   "detectedInfo": {
     "brand": "string or null",
     "model": "string or null",
@@ -82,17 +92,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No message provided' }, { status: 400 });
     }
 
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
-      tools: [{ googleSearchRetrieval: {} }]
-    });
-
-    // Build conversation for context
-    const chatHistory = conversationHistory?.map((msg: { role: string; content: string }) => ({
-      role: msg.role === 'user' ? 'user' : 'model',
-      parts: [{ text: msg.content }]
-    })) || [];
-
     // Add context about what we already know
     let contextMessage = '';
     if (currentContext) {
@@ -103,23 +102,62 @@ export async function POST(request: NextRequest) {
       if (currentContext.imageAnalysis) contextMessage += `Image Analysis: ${JSON.stringify(currentContext.imageAnalysis)}\n`;
     }
 
-    const chat = model.startChat({
-      history: [
-        {
-          role: 'user',
-          parts: [{ text: SYSTEM_PROMPT }]
-        },
-        {
-          role: 'model',
-          parts: [{ text: 'I understand. I am a Paint Code Expert assistant. I will help users find their car paint codes by asking questions, analyzing their responses, and matching them to the paint database. I will respond in the JSON format specified.' }]
-        },
-        ...chatHistory
-      ]
-    });
+    let text: string;
 
-    const result = await chat.sendMessage(message + contextMessage);
-    const response = await result.response;
-    const text = response.text();
+    if (USE_WEB_SEARCH) {
+      // MODE 1: Gemini with Google Search (limited free tier, but has web search)
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-2.0-flash-exp',
+        tools: [{ googleSearchRetrieval: {} }]
+      });
+
+      const chatHistory = conversationHistory?.map((msg: { role: string; content: string }) => ({
+        role: msg.role === 'user' ? 'user' : 'model',
+        parts: [{ text: msg.content }]
+      })) || [];
+
+      const chat = model.startChat({
+        history: [
+          { role: 'user', parts: [{ text: SYSTEM_PROMPT }] },
+          { role: 'model', parts: [{ text: 'I understand. I will use Google Search to find accurate paint code information.' }] },
+          ...chatHistory
+        ]
+      });
+
+      const result = await chat.sendMessage(message + contextMessage);
+      const response = await result.response;
+      text = response.text();
+    } else {
+      // MODE 2: OpenRouter (free, unlimited, no web search)
+      const MODEL = process.env.AI_CHAT_MODEL || 'meta-llama/llama-3.2-3b-instruct:free';
+
+      const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+        { role: 'system', content: SYSTEM_PROMPT }
+      ];
+
+      if (conversationHistory && conversationHistory.length > 0) {
+        conversationHistory.forEach((msg: { role: string; content: string }) => {
+          messages.push({
+            role: msg.role === 'user' ? 'user' : 'assistant',
+            content: msg.content
+          });
+        });
+      }
+
+      messages.push({
+        role: 'user',
+        content: message + contextMessage
+      });
+
+      const completion = await openrouter.chat.completions.create({
+        model: MODEL,
+        messages: messages,
+        // TODO: Uncomment when using paid models (GPT-4, Claude, Gemini)
+        // response_format: { type: 'json_object' },
+      });
+
+      text = completion.choices[0]?.message?.content || '';
+    }
 
     // Try to parse JSON from response
     let parsedResponse;
@@ -151,7 +189,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Gemini chat error:', error);
+    console.error(`Chat error (${USE_WEB_SEARCH ? 'Gemini with Search' : 'OpenRouter'}):`, error);
     return NextResponse.json(
       { error: 'Failed to process message', details: String(error) },
       { status: 500 }

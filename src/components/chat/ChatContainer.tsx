@@ -426,9 +426,12 @@ export function ChatContainer() {
           </button>
           <div className="flex-1">
             <h2 className="font-semibold text-gray-800 text-sm sm:text-base">Paint Code Assistant</h2>
-            <p className="text-xs text-gray-500 hidden sm:block">AI-powered color matching</p>
+            <p className="text-xs text-gray-500 hidden sm:block mt-0.5">AI-powered color matching</p>
           </div>
           <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+              100% Free
+            </span>
             <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
               <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
               Online
