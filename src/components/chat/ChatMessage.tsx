@@ -1,9 +1,61 @@
 'use client';
 
 import { ChatMessage as ChatMessageType } from '@/types';
+import Link from 'next/link';
 
 interface ChatMessageProps {
   message: ChatMessageType;
+}
+
+// Parse markdown (bold **text** and links [text](url))
+function parseMarkdown(text: string) {
+  const elements: React.ReactNode[] = [];
+  let key = 0;
+
+  // Split by markdown links [text](url)
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = linkRegex.exec(text)) !== null) {
+    // Add text before the link
+    if (match.index > lastIndex) {
+      const beforeText = text.substring(lastIndex, match.index);
+      elements.push(...parseBold(beforeText, key));
+      key += 100;
+    }
+
+    // Add the link
+    const linkText = match[1];
+    const linkUrl = match[2];
+    elements.push(
+      <Link
+        key={key++}
+        href={linkUrl}
+        className="text-blue-600 hover:text-blue-700 underline font-medium"
+      >
+        {linkText}
+      </Link>
+    );
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text after last link
+  if (lastIndex < text.length) {
+    const remainingText = text.substring(lastIndex);
+    elements.push(...parseBold(remainingText, key));
+  }
+
+  return elements;
+}
+
+// Parse bold **text**
+function parseBold(text: string, startKey: number) {
+  const parts = text.split('**');
+  return parts.map((part, i) =>
+    i % 2 === 1 ? <strong key={startKey + i}>{part}</strong> : <span key={startKey + i}>{part}</span>
+  );
 }
 
 export function ChatMessage({ message }: ChatMessageProps) {
@@ -27,11 +79,9 @@ export function ChatMessage({ message }: ChatMessageProps) {
             : 'bg-blue-600 text-white'
         }`}
       >
-        {/* Message content with basic markdown support */}
+        {/* Message content with markdown support (bold and links) */}
         <div className="text-sm leading-relaxed whitespace-pre-wrap">
-          {message.content.split('**').map((part, i) =>
-            i % 2 === 1 ? <strong key={i}>{part}</strong> : part
-          )}
+          {parseMarkdown(message.content)}
         </div>
 
         {/* Image preview if present */}

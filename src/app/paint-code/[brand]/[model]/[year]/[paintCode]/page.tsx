@@ -1,6 +1,13 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getBrandBySlug, getModelByName, getPaintCodeByCode, getAllPaintCodePaths } from '@/data/paint-codes';
+import { findPaintCode } from '@/lib/paintDatabase';
+import { FunFacts } from '@/components/FunFacts';
+import { PaintLocationSection } from '@/components/PaintLocationSection';
+import { EraPaintsVideoSection } from '@/components/EraPaintsVideoSection';
+import { EraPaintsArticleSection } from '@/components/EraPaintsArticleSection';
+import ColorSwatch from '@/components/ColorSwatch';
+import type { PaintCodeHex } from '@/types';
 
 interface PageProps {
   params: Promise<{
@@ -9,6 +16,14 @@ interface PageProps {
     year: string;
     paintCode: string;
   }>;
+  searchParams: Promise<{
+    hex?: string;
+    repairType?: string;
+    recommendedProduct?: string;
+    locations?: string;
+    eraArticle?: string;
+    eraVideo?: string;
+  }>;
 }
 
 // Generate static paths for all paint codes
@@ -16,21 +31,32 @@ export async function generateStaticParams() {
   return getAllPaintCodePaths();
 }
 
+// Allow dynamic params for AI-detected paint codes not in database
+export const dynamicParams = true;
+
 export async function generateMetadata({ params }: PageProps) {
   const { brand: brandSlug, model: modelSlug, year, paintCode: paintCodeSlug } = await params;
 
-  const brand = getBrandBySlug(brandSlug);
-  if (!brand) return { title: 'Paint Code Not Found' };
+  const brand = getBrandBySlug(brandSlug) || {
+    name: brandSlug.charAt(0).toUpperCase() + brandSlug.slice(1),
+    slug: brandSlug,
+    models: [],
+  };
 
   const model = brand.models.find(
     m => m.name.toLowerCase().replace(/\s+/g, '-') === modelSlug.toLowerCase()
-  );
-  if (!model) return { title: 'Paint Code Not Found' };
+  ) || {
+    name: modelSlug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+    years: [],
+    paintCodes: [],
+  };
 
   const paintCode = model.paintCodes.find(
     p => p.code.toLowerCase().replace(/\s+/g, '-') === paintCodeSlug.toLowerCase()
-  );
-  if (!paintCode) return { title: 'Paint Code Not Found' };
+  ) || {
+    code: paintCodeSlug.toUpperCase().replace(/-/g, ' '),
+    name: 'AI-Detected Color',
+  };
 
   return {
     title: `${paintCode.code} ${paintCode.name} - ${year} ${brand.name} ${model.name} Paint Code`,
@@ -38,28 +64,115 @@ export async function generateMetadata({ params }: PageProps) {
   };
 }
 
-export default async function PaintCodeResultPage({ params }: PageProps) {
+export default async function PaintCodeResultPage({ params, searchParams }: PageProps) {
   const { brand: brandSlug, model: modelSlug, year, paintCode: paintCodeSlug } = await params;
+  const {
+    hex: hexFromUrl,
+    repairType,
+    recommendedProduct,
+    locations: locationsParam,
+    eraArticle: articleParam,
+    eraVideo: videoParam,
+  } = await searchParams;
+
+  // Parse and validate year first
+  const yearNum = parseInt(year);
+  if (isNaN(yearNum) || yearNum < 1980 || yearNum > new Date().getFullYear() + 1) notFound();
 
   // Look up the data
-  const brand = getBrandBySlug(brandSlug);
-  if (!brand) notFound();
+  let brand = getBrandBySlug(brandSlug);
 
-  const model = brand.models.find(
+  // If brand not in database, create fallback brand object
+  if (!brand) {
+    brand = {
+      name: brandSlug.charAt(0).toUpperCase() + brandSlug.slice(1),
+      slug: brandSlug,
+      models: [],
+      codeLocations: ['Driver side door jamb', 'Inside driver door frame'],
+    };
+  }
+
+  let model = brand.models.find(
     m => m.name.toLowerCase().replace(/\s+/g, '-') === modelSlug.toLowerCase()
   );
-  if (!model) notFound();
 
-  const yearNum = parseInt(year);
-  if (!model.years.includes(yearNum)) notFound();
+  // If model not in database, create fallback model object
+  if (!model) {
+    model = {
+      name: modelSlug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+      years: [yearNum],
+      paintCodes: [],
+    };
+  }
 
-  const paintCode = model.paintCodes.find(
+  let paintCode = model.paintCodes.find(
     p => p.code.toLowerCase().replace(/\s+/g, '-') === paintCodeSlug.toLowerCase()
   );
-  if (!paintCode) notFound();
 
-  // Get code locations
+  // If paint code not found in this model, try other models of the same brand
+  // (AI might have picked the wrong model but right brand/paint code)
+  if (!paintCode) {
+    for (const otherModel of brand.models) {
+      paintCode = otherModel.paintCodes.find(
+        p => p.code.toLowerCase().replace(/\s+/g, '-') === paintCodeSlug.toLowerCase()
+      );
+      if (paintCode) {
+        // Found it in another model - use that model's data instead
+        // (but keep the year the user specified)
+        break;
+      }
+    }
+  }
+
+  // If still not found in old database, check the new paint database
+  // Keep paintCodeFromDb separate for swatch rendering with full RGB data
+  const paintCodeFromDb = findPaintCode(brand.name, paintCodeSlug.toUpperCase().replace(/-/g, ' '));
+  if (!paintCode && paintCodeFromDb) {
+    // Use the database entry directly as paintCode (it has all required fields)
+    paintCode = paintCodeFromDb as any; // Type cast to avoid conflicts with old PaintCode interface
+  }
+
+  // If still not found, create a fallback paint code object from AI-detected data
+  // This allows the page to work with paint codes not in our database
+  if (!paintCode) {
+    paintCode = {
+      code: paintCodeSlug.toUpperCase().replace(/-/g, ' '),
+      name: 'AI-Detected Color',
+      hex: hexFromUrl,
+    } as any; // Type cast for AI-detected colors without full RGB data
+  }
+
+  // Get code locations (use researched data if available, otherwise fall back to database)
+  const researchedLocations = locationsParam ? (() => {
+    try {
+      return JSON.parse(locationsParam);
+    } catch {
+      return null;
+    }
+  })() : null;
+
   const codeLocations = model.codeLocations || brand.codeLocations || ['Driver side door jamb'];
+
+  // Parse ERA Paints content
+  const eraArticle = articleParam ? (() => {
+    try {
+      return JSON.parse(articleParam);
+    } catch {
+      return null;
+    }
+  })() : null;
+
+  const eraVideo = videoParam ? (() => {
+    try {
+      return JSON.parse(videoParam);
+    } catch {
+      return null;
+    }
+  })() : null;
+
+  // Use hex color from URL if provided, otherwise use from database
+  // Use base color from new database if available
+  const hexColor = hexFromUrl || paintCodeFromDb?.hex.base || paintCode.hex;
 
   // Build Amazon link from ASIN (example format)
   // In production, this would come from your CSV data with actual ASINs
@@ -105,17 +218,32 @@ export default async function PaintCodeResultPage({ params }: PageProps) {
             <div className="bg-gradient-to-br from-blue-50/50 via-purple-50/30 to-pink-50/50 border border-blue-100/50 rounded-3xl p-8 md:p-10 shadow-sm">
               <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
                 {/* Color Swatch */}
-                {paintCode.hex && (
+                {(paintCodeFromDb?.hex || hexColor) && (
                   <div className="relative flex-shrink-0">
-                    <div
-                      className="w-28 h-28 md:w-32 md:h-32 rounded-2xl shadow-xl border-4 border-white ring-1 ring-gray-200"
-                      style={{ backgroundColor: paintCode.hex }}
-                    />
-                    <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-6 h-6 text-green-500">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
-                      </svg>
-                    </div>
+                    {/* Use 3D gradient swatch if database entry available */}
+                    {paintCodeFromDb?.hex ? (
+                      <div className="relative">
+                        <ColorSwatch hex={paintCodeFromDb.hex} size={128} showBorder={true} />
+                        <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center ring-2 ring-gray-200">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-6 h-6 text-green-500">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Fallback to simple square swatch for AI-detected colors */
+                      <div>
+                        <div
+                          className="w-28 h-28 md:w-32 md:h-32 rounded-2xl shadow-xl border-4 border-white ring-1 ring-gray-200"
+                          style={{ backgroundColor: hexColor }}
+                        />
+                        <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-6 h-6 text-green-500">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -141,40 +269,69 @@ export default async function PaintCodeResultPage({ params }: PageProps) {
               </div>
             </div>
 
-            {/* Where to Find It Section */}
-            <div className="bg-white border border-gray-200 rounded-2xl p-6 md:p-8 shadow-sm">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 text-blue-600">
-                    <path fillRule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.071-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 0 0-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 0 0 2.682 2.282 16.975 16.975 0 0 0 1.145.742ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-xl md:text-2xl font-bold text-gray-900">Find Your Paint Code</h3>
-                  <p className="text-sm text-gray-600 mt-0.5">Verify by checking these locations on your vehicle</p>
-                </div>
-              </div>
-
-              <div className="space-y-3 mb-6">
-                {codeLocations.map((location, index) => (
-                  <div key={index} className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
-                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <span className="text-blue-600 font-bold text-sm">{index + 1}</span>
-                    </div>
-                    <p className="text-gray-800 font-medium flex-1">{location}</p>
+            {/* Paint Code Location Section - Use researched data if available */}
+            {researchedLocations ? (
+              <PaintLocationSection
+                brand={brand.name}
+                model={model.name}
+                year={yearNum}
+                locations={researchedLocations.locations}
+                sources={researchedLocations.sources}
+              />
+            ) : (
+              /* Fallback to basic location display */
+              <div className="bg-white border border-gray-200 rounded-2xl p-6 md:p-8 shadow-sm">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 text-blue-600">
+                      <path fillRule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 0 0 .723 0l.028-.015.071-.041a16.975 16.975 0 0 0 1.144-.742 19.58 19.58 0 0 0 2.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 0 0-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 0 0 2.682 2.282 16.975 16.975 0 0 0 1.145.742ZM12 13.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clipRule="evenodd" />
+                    </svg>
                   </div>
-                ))}
-              </div>
+                  <div>
+                    <h3 className="text-xl md:text-2xl font-bold text-gray-900">Find Your Paint Code</h3>
+                    <p className="text-sm text-gray-600 mt-0.5">Common locations on your vehicle</p>
+                  </div>
+                </div>
 
-              {/* Diagram Placeholder with Better Styling */}
-              <div className="bg-gradient-to-br from-gray-50 to-gray-100 border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-16 h-16 text-gray-400 mx-auto mb-3">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
-                </svg>
-                <p className="text-gray-500 font-medium">Visual diagram coming soon</p>
-                <p className="text-sm text-gray-400 mt-1">Location guide for {brand.name} {model.name}</p>
+                <div className="space-y-3">
+                  {codeLocations.map((location, index) => (
+                    <div key={index} className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl">
+                      <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-blue-600 font-bold text-sm">{index + 1}</span>
+                      </div>
+                      <p className="text-gray-800 font-medium flex-1">{location}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* ERA Paints Video Section */}
+            {eraVideo && (
+              <EraPaintsVideoSection
+                videoId={eraVideo.videoId}
+                title={eraVideo.title}
+                repairType={repairType}
+              />
+            )}
+
+            {/* ERA Paints Article Section */}
+            {eraArticle && (
+              <EraPaintsArticleSection
+                title={eraArticle.title}
+                url={eraArticle.url}
+                snippet={eraArticle.snippet}
+              />
+            )}
+
+            {/* Fun Facts & History Section */}
+            <FunFacts
+              brand={brand.name}
+              model={model.name}
+              year={yearNum}
+              paintCode={paintCode.code}
+              colorName={paintCode.name}
+            />
           </div>
 
           {/* Right Column - Purchase Options */}

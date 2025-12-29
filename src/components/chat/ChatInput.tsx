@@ -12,7 +12,7 @@ interface ChatInputProps {
 export function ChatInput({
   onSubmit,
   onImageUpload,
-  placeholder = 'Describe your car or ask a question...',
+  placeholder = 'Type a message or paste an image...',
   disabled = false
 }: ChatInputProps) {
   const [value, setValue] = useState('');
@@ -61,6 +61,41 @@ export function ChatInput({
     e.target.value = '';
   };
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    if (!onImageUpload) return;
+
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    // Look for image in clipboard
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+
+      if (item.type.startsWith('image/')) {
+        e.preventDefault(); // Prevent pasting text
+
+        const file = item.getAsFile();
+        if (!file) continue;
+
+        // Validate file size (max 10MB)
+        if (file.size > 10 * 1024 * 1024) {
+          alert('Image size should be less than 10MB');
+          return;
+        }
+
+        // Convert to base64 data URL for the API
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64Url = reader.result as string;
+          onImageUpload(base64Url);
+        };
+        reader.readAsDataURL(file);
+
+        return; // Only process the first image
+      }
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} className="flex items-center gap-3 p-4 bg-white border-t border-gray-200">
       {/* Image upload button */}
@@ -89,6 +124,7 @@ export function ChatInput({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
         placeholder={placeholder}
         disabled={disabled}
         className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"

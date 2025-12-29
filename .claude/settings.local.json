@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "WebSearch",
+      "WebFetch(domain:openrouter.ai)",
+      "Bash(npm install:*)",
+      "Bash(Get-Content \"C:\\\\Users\\\\shris\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--VIBECODE-Claude-findmypaintcode\\\\tasks\\\\b766bf9.output\")",
+      "Bash(Select-Object -Last 50)",
+      "Bash(powershell -Command \"Get-Content ''C:\\\\VIBECODE\\\\Claude\\\\findmypaintcode\\\\ColorData\\\\SHRISH_MODIFIED_ERA_Martin_UsageList.csv'' | Measure-Object -Line\")",
+      "Bash(powershell -Command:*)",
+      "Bash(findstr /R \"^[A-Z]\" \"C:\\\\VIBECODE\\\\Claude\\\\findmypaintcode\\\\ColorData\\\\SHRISH_MODIFIED_ERA_Martin_UsageList.csv\")",
+      "Bash(findstr:*)",
+      "Bash(npm run merge-data:*)",
+      "Bash(node scripts/prepare-tiered-database.js:*)",
+      "Bash(curl:*)",
+      "Bash(python:*)",
+      "Bash(timeout /t 3)",
+      "Bash(taskkill //F //PID 16048)",
+      "Bash(Get-Content \"C:\\\\Users\\\\shris\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--VIBECODE-Claude-findmypaintcode\\\\tasks\\\\be0a901.output\")",
+      "WebFetch(domain:www.erapaints.com)",
+      "WebFetch(domain:erapaints.com)",
+      "WebFetch(domain:web.archive.org)",
+      "WebFetch(domain:www.youtube.com)",
+      "Bash(node scripts/process-colordata.js:*)",
+      "Bash(npm run process-colordata:*)",
+      "Bash(node -e:*)"
+    ]
+  },
+  "outputStyle": "Learning"
+}

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ChatMessage as ChatMessageType, ChatOption } from '@/types';
+import { useRouter } from 'next/navigation';
+import { ChatMessage as ChatMessageType, ChatOption, DetectedInfo, ConversationStage } from '@/types';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { ChatOptions } from './ChatOptions';
@@ -10,12 +11,25 @@ import { ChatSidebar } from './ChatSidebar';
 // Generate unique ID
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
-// Welcome message
+// Enhanced Welcome message - Start with brand selection
 const getWelcomeMessage = (): ChatMessageType => ({
   id: generateId(),
   type: 'bot',
-  content: "Hi! I'm your Paint Code Expert. I can help you find the exact paint code for your car.\n\nYou can:\n• Upload a photo of your car and I'll analyze it\n• Or just tell me your car's make, model, and year\n\nHow would you like to start?",
+  content: "Hi! I'm your Paint Code Expert. I'll help you find the exact paint code for your car.\n\nLet's start! What's your car brand?",
   timestamp: new Date(),
+  options: [
+    { label: 'Toyota', value: 'brand-toyota' },
+    { label: 'Honda', value: 'brand-honda' },
+    { label: 'Ford', value: 'brand-ford' },
+    { label: 'Chevrolet', value: 'brand-chevrolet' },
+    { label: 'BMW', value: 'brand-bmw' },
+    { label: 'Mercedes', value: 'brand-mercedes' },
+    { label: 'Nissan', value: 'brand-nissan' },
+    { label: 'Acura', value: 'brand-acura' },
+    { label: 'Other Brand', value: 'brand-other' },
+    { label: '🤷 Not Sure', value: 'not-sure-brand' },
+    { label: '📷 Upload Photo Instead', value: 'upload-photo-instead' },
+  ],
 });
 
 interface ChatHistoryItem {
@@ -32,21 +46,14 @@ interface ConversationMessage {
   content: string;
 }
 
-interface DetectedInfo {
-  brand?: string | null;
-  model?: string | null;
-  year?: number | null;
-  paintCode?: string | null;
-  colorName?: string | null;
-}
-
 const STORAGE_KEY = 'findmypaintcode_chats';
+const ANALYTICS_KEY = 'findmypaintcode_analytics';
 
-// Load chats from localStorage
+// Load chats from sessionStorage (session-only, no quota issues)
 const loadChats = (): ChatHistoryItem[] => {
   if (typeof window === 'undefined') return [];
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = sessionStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
       return parsed.map((chat: ChatHistoryItem) => ({
@@ -64,17 +71,49 @@ const loadChats = (): ChatHistoryItem[] => {
   return [];
 };
 
-// Save chats to localStorage
+// Save chats to sessionStorage (clears when browser closes)
 const saveChats = (chats: ChatHistoryItem[]) => {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(chats));
+    // Only keep last 5 chats to prevent quota issues
+    const recentChats = chats.slice(-5);
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(recentChats));
   } catch (e) {
     console.error('Failed to save chats:', e);
+    // If still failing, clear old data and try again
+    try {
+      sessionStorage.removeItem(STORAGE_KEY);
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(chats.slice(-3)));
+    } catch (retryError) {
+      console.error('Failed to save chats after cleanup:', retryError);
+    }
+  }
+};
+
+// Track success rate analytics (lightweight, persists across sessions)
+const trackAnalytics = (success: boolean, paintCodeFound?: string) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const stored = localStorage.getItem(ANALYTICS_KEY);
+    const analytics = stored ? JSON.parse(stored) : { total: 0, successful: 0, failed: 0 };
+
+    analytics.total++;
+    if (success) {
+      analytics.successful++;
+      analytics.lastSuccess = new Date().toISOString();
+    } else {
+      analytics.failed++;
+    }
+
+    localStorage.setItem(ANALYTICS_KEY, JSON.stringify(analytics));
+  } catch (e) {
+    console.error('Failed to save analytics:', e);
   }
 };
 
 export function ChatContainer() {
+  const router = useRouter();
+
   const [messages, setMessages] = useState<ChatMessageType[]>([getWelcomeMessage()]);
   const [isTyping, setIsTyping] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([]);
@@ -82,14 +121,27 @@ export function ChatContainer() {
   const [currentOptions, setCurrentOptions] = useState<ChatOption[]>([]);
   const [imageAnalysis, setImageAnalysis] = useState<unknown>(null);
 
+  // NEW: Conversation stage tracking
+  const [stage, setStage] = useState<ConversationStage>('welcome');
+  const [waitingForImageType, setWaitingForImageType] = useState<'car' | 'vin' | null>(null);
+
   const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Load chats on mount
+  // Load chats on mount and cleanup old localStorage data
   useEffect(() => {
+    // Cleanup: Remove old localStorage chat data (moved to sessionStorage)
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch (e) {
+        console.error('Failed to cleanup old localStorage:', e);
+      }
+    }
+
     const loaded = loadChats();
     setChatHistory(loaded);
   }, []);
@@ -189,6 +241,7 @@ export function ChatContainer() {
             ...detectedInfo,
             imageAnalysis,
           },
+          currentStage: stage,
         }),
       });
 
@@ -204,7 +257,7 @@ export function ChatContainer() {
           { role: 'assistant', content: aiResponse.message },
         ]);
 
-        // Update detected info
+        // Update detected info (including hexColor from AI)
         if (aiResponse.detectedInfo) {
           setDetectedInfo(prev => ({
             ...prev,
@@ -212,6 +265,11 @@ export function ChatContainer() {
               Object.entries(aiResponse.detectedInfo).filter(([, v]) => v !== null)
             ),
           }));
+        }
+
+        // Update stage if provided
+        if (aiResponse.stage) {
+          setStage(aiResponse.stage);
         }
 
         // Convert suggested options to ChatOptions
@@ -222,10 +280,78 @@ export function ChatContainer() {
 
         addBotMessage(aiResponse.message, options.length > 0 ? options : undefined);
 
-        // Handle actions
-        if (aiResponse.action === 'show_result' && detectedInfo.paintCode) {
-          const url = `/paint-code/${detectedInfo.brand?.toLowerCase()}/${detectedInfo.model?.toLowerCase().replace(/\s+/g, '-')}/${detectedInfo.year}/${detectedInfo.paintCode?.toLowerCase().replace(/\s+/g, '-')}`;
-          addBotMessage(`Great! I found your paint code. [View your paint options](${url})`);
+        // Handle actions based on AI response
+        if (aiResponse.action === 'diagnose_problem' && aiResponse.detectedInfo?.repairProblem) {
+          // User just described their problem - diagnose it
+          setIsTyping(true);
+          setStage('diagnosing_problem');
+
+          try {
+            const diagnosisResponse = await fetch('/api/diagnose-repair', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                problem: aiResponse.detectedInfo.repairProblem,
+                vehicle: `${detectedInfo.brand} ${detectedInfo.model}`,
+              }),
+            });
+
+            const diagnosisData = await diagnosisResponse.json();
+
+            if (diagnosisData.success && diagnosisData.diagnosis) {
+              setDetectedInfo(prev => ({
+                ...prev,
+                repairProblem: diagnosisData.diagnosis.problem,
+                repairType: diagnosisData.diagnosis.repairType,
+                recommendedProduct: diagnosisData.diagnosis.recommendedProduct,
+              }));
+
+              addBotMessage(`Perfect! For ${diagnosisData.diagnosis.repairType} repairs, I recommend a ${diagnosisData.diagnosis.productName}. Let me gather everything you need...`);
+
+              // Trigger research sequence
+              await researchPaintLocation();
+              await researchEraContent();
+
+              // Show result link with option to navigate (will skip if required fields missing)
+              setTimeout(() => {
+                showResultLink();
+              }, 1000);
+            }
+          } catch (error) {
+            console.error('[DIAGNOSIS] Error:', error);
+            // Continue without diagnosis
+          } finally {
+            setIsTyping(false);
+          }
+        } else if (aiResponse.action === 'show_result' && aiResponse.detectedInfo?.paintCode) {
+          // OLD FLOW: Direct result (kept for backward compatibility)
+          const brand = aiResponse.detectedInfo.brand || detectedInfo.brand;
+          const model = aiResponse.detectedInfo.model || detectedInfo.model;
+          const year = aiResponse.detectedInfo.year || detectedInfo.year;
+          const paintCode = aiResponse.detectedInfo.paintCode;
+
+          // Check if we have repair problem - if not, ask for it
+          if (!detectedInfo.repairProblem) {
+            setStage('diagnosing_problem');
+            addBotMessage(
+              "Great! Before I show you the results, what problem are you fixing? This helps me recommend the right product.",
+              [
+                { label: 'Small chips/scratches', value: 'problem-chips' },
+                { label: 'Larger damaged area', value: 'problem-large' },
+                { label: 'Deep scratch', value: 'problem-deep' },
+                { label: 'Just need touch-up', value: 'problem-touchup' },
+              ]
+            );
+          } else {
+            // We have everything - do research and show link
+            await researchPaintLocation();
+            await researchEraContent();
+
+            // Show result link (will skip if required fields missing)
+            setTimeout(() => {
+              showResultLink();
+            }, 1000);
+          }
         }
       } else {
         addBotMessage("I'm sorry, I had trouble processing that. Could you try again?");
@@ -288,16 +414,11 @@ export function ChatContainer() {
 
         message += `\n**Confidence:** ${analysis.confidence || 'medium'}\n\n`;
 
-        if (analysis.confidence === 'high' && analysis.possiblePaintCodes?.length > 0) {
-          message += "I'm fairly confident about this match! Want me to show you exactly where to find the paint code sticker on your car?";
-        } else {
-          message += "Is this identification correct? Once confirmed, I can help you locate the paint code on your vehicle.";
-        }
+        message += "Does this look correct?";
 
         const options: ChatOption[] = [
-          { label: 'Yes, that\'s correct', value: 'confirm-yes' },
-          { label: 'No, let me describe my car', value: 'confirm-no' },
-          { label: 'Show me where to find the code', value: 'show-location' },
+          { label: '✅ Yes, that\'s correct', value: 'confirm-yes' },
+          { label: '❌ No, try again', value: 'confirm-no' },
         ];
 
         addBotMessage(message, options);
@@ -330,19 +451,410 @@ export function ChatContainer() {
     }
   };
 
+  // NEW: Handle VIN tag upload (separate from car photo)
+  const analyzeVinTag = async (imageDataUrl: string) => {
+    setIsTyping(true);
+    addBotMessage("Reading your VIN tag... Extracting paint code information...");
+
+    try {
+      const mimeTypeMatch = imageDataUrl.match(/^data:([^;]+);/);
+      const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
+
+      const response = await fetch('/api/analyze-vin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: imageDataUrl,
+          mimeType,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.vinData) {
+        const vinData = data.vinData;
+
+        // Update detected info with VIN data
+        setDetectedInfo(prev => ({
+          ...prev,
+          brand: vinData.brand || prev.brand,
+          model: vinData.model || prev.model,
+          year: vinData.year || prev.year,
+          paintCode: vinData.paintCode || prev.paintCode,
+          colorName: vinData.colorName || prev.colorName,
+          hexColor: vinData.hexColor || prev.hexColor,
+          vinNumber: vinData.vin,
+          imageType: 'vin',
+        }));
+
+        let message = "Perfect! Here's what I found on your VIN tag:\n\n";
+
+        if (vinData.vin) {
+          message += `**VIN:** ${vinData.vin}\n`;
+        }
+
+        if (vinData.paintCode) {
+          message += `**Paint Code:** ${vinData.paintCode}\n`;
+        }
+
+        if (vinData.colorName) {
+          message += `**Color:** ${vinData.colorName}\n`;
+        }
+
+        if (vinData.brand && vinData.model && vinData.year) {
+          message += `**Vehicle:** ${vinData.year} ${vinData.brand} ${vinData.model}\n`;
+        }
+
+        message += `\n**Confidence:** ${vinData.confidence}\n\n`;
+        message += "Is this information correct?";
+
+        const options: ChatOption[] = [
+          { label: 'Yes, that\'s correct!', value: 'confirm-vin-yes' },
+          { label: 'No, let me clarify', value: 'confirm-vin-no' },
+        ];
+
+        addBotMessage(message, options);
+        setConversationHistory(prev => [
+          ...prev,
+          { role: 'user', content: '[User uploaded VIN tag photo]' },
+          { role: 'assistant', content: message },
+        ]);
+
+        setStage('verifying_color');
+      } else {
+        addBotMessage(
+          "I had trouble reading the VIN tag clearly. Could you try:\n• Taking a closer photo with better lighting\n• Or just tell me your car's details instead?",
+          [
+            { label: 'Try another VIN photo', value: 'retry-vin' },
+            { label: 'Describe my car instead', value: 'describe' },
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('VIN analysis error:', error);
+      addBotMessage(
+        "Sorry, I had trouble analyzing that VIN tag. You can try another photo or tell me your car details.",
+        [{ label: 'Describe my car instead', value: 'describe' }]
+      );
+    } finally {
+      setIsTyping(false);
+      setWaitingForImageType(null);
+    }
+  };
+
+  // NEW: Research paint code location
+  const researchPaintLocation = async () => {
+    const { brand, model, year } = detectedInfo;
+
+    if (!brand || !model || !year) {
+      console.warn('[RESEARCH] Missing vehicle info for paint location research');
+      return;
+    }
+
+    setIsTyping(true);
+    setStage('researching_location');
+    addBotMessage("Let me research where to find the paint code on your specific vehicle...");
+
+    try {
+      const response = await fetch('/api/research-paint-location', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brand, model, year }),
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.locations) {
+        setDetectedInfo(prev => ({
+          ...prev,
+          paintLocationResearch: {
+            locations: data.locations,
+            sources: data.sources || [],
+            researched: true,
+          },
+        }));
+
+        console.log('[RESEARCH] Paint location research complete:', data.locations.length, 'locations');
+      } else {
+        console.warn('[RESEARCH] Paint location research failed:', data.error);
+        // Continue anyway - result page will show generic locations
+      }
+    } catch (error) {
+      console.error('[RESEARCH] Paint location error:', error);
+      // Continue anyway - not critical
+    } finally {
+      setIsTyping(false);
+    }
+  };
+
+  // NEW: Research ERA Paints content
+  const researchEraContent = async () => {
+    const { brand, model, repairType, repairProblem } = detectedInfo;
+
+    if (!brand || !model) {
+      console.warn('[RESEARCH] Missing vehicle info for ERA content research');
+      return;
+    }
+
+    setIsTyping(true);
+    setStage('researching_era_content');
+    addBotMessage("Finding the best ERA Paints resources for you...");
+
+    try {
+      const response = await fetch('/api/research-era-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brand, model, repairType, repairProblem }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setDetectedInfo(prev => ({
+          ...prev,
+          eraContent: {
+            article: data.article,
+            video: data.video,
+            researched: true,
+          },
+        }));
+
+        console.log('[RESEARCH] ERA content research complete');
+      } else {
+        console.warn('[RESEARCH] ERA content research failed:', data.error);
+        // Continue anyway - result page will hide these sections
+      }
+    } catch (error) {
+      console.error('[RESEARCH] ERA content error:', error);
+      // Continue anyway - not critical
+    } finally {
+      setIsTyping(false);
+    }
+  };
+
+  // Build result URL with all research data
+  const buildResultUrl = () => {
+    const { brand, model, year, paintCode, hexColor, repairType, recommendedProduct,
+            paintLocationResearch, eraContent } = detectedInfo;
+
+    if (!brand || !model || !year || !paintCode) {
+      console.log('[NAV] Cannot build URL - missing required fields:', { brand, model, year, paintCode });
+      return null;
+    }
+
+    const params = new URLSearchParams();
+
+    if (hexColor) params.set('hex', hexColor);
+    if (repairType) params.set('repairType', repairType);
+    if (recommendedProduct) params.set('recommendedProduct', recommendedProduct);
+
+    if (paintLocationResearch) {
+      params.set('locations', JSON.stringify({
+        locations: paintLocationResearch.locations,
+        sources: paintLocationResearch.sources,
+      }));
+    }
+
+    if (eraContent?.article) {
+      params.set('eraArticle', JSON.stringify(eraContent.article));
+    }
+
+    if (eraContent?.video) {
+      params.set('eraVideo', JSON.stringify(eraContent.video));
+    }
+
+    const url = `/paint-code/${brand.toLowerCase()}/${model.toLowerCase().replace(/\s+/g, '-')}/${year}/${paintCode.toLowerCase().replace(/\s+/g, '-')}?${params.toString()}`;
+
+    console.log('[NAV] Built result URL:', url);
+    return url;
+  };
+
+  // Show result link without auto-navigating
+  const showResultLink = () => {
+    const url = buildResultUrl();
+    if (!url) return;
+
+    const { brand, model, year, paintCode } = detectedInfo;
+
+    addBotMessage(
+      `Perfect! I've found everything you need for your **${year} ${brand} ${model}**.\n\n` +
+      `Paint Code: **${paintCode}**\n\n` +
+      `Your personalized result page includes:\n` +
+      `✓ Exact paint code location on your vehicle\n` +
+      `✓ ERA Paints product recommendations\n` +
+      `✓ How-to repair guides & videos\n` +
+      `✓ Direct purchase links\n\n` +
+      `Ready to view your results?`,
+      [
+        { label: '🎨 View My Results', value: 'view-results' },
+        { label: '🔄 Start Over', value: 'start-over' },
+      ]
+    );
+
+    // Store URL for later navigation
+    setDetectedInfo(prev => ({ ...prev, resultUrl: url }));
+  };
+
   const handleTextSubmit = (text: string) => {
     addUserMessage(text);
     sendToChat(text);
   };
 
   const handleImageUpload = (imageUrl: string) => {
-    addUserMessage("Here's a photo of my car", imageUrl);
-    analyzeImage(imageUrl);
+    // Check if we're waiting for a specific image type
+    if (waitingForImageType === 'vin') {
+      addUserMessage("Here's my VIN tag photo", imageUrl);
+      analyzeVinTag(imageUrl);
+    } else {
+      // Default to car photo
+      addUserMessage("Here's a photo of my car", imageUrl);
+      setDetectedInfo(prev => ({ ...prev, imageType: 'car' }));
+      analyzeImage(imageUrl);
+    }
   };
 
   const handleOptionSelect = (option: ChatOption) => {
     addUserMessage(option.label);
     setCurrentOptions([]);
+
+    // BRAND SELECTION
+    if (option.value.startsWith('brand-')) {
+      const brand = option.label; // "Toyota", "Honda", etc.
+      setDetectedInfo(prev => ({ ...prev, brand }));
+      setStage('gathering_info');
+
+      if (option.value === 'brand-other') {
+        addBotMessage("No problem! Please tell me your car's brand (e.g., Mercedes, Nissan, etc.)");
+        return;
+      }
+
+      addBotMessage(
+        `Great! You have a ${brand}. Now, please upload a photo of your car so I can identify the model and color.`,
+        [
+          { label: '📷 Upload Car Photo', value: 'upload-car-photo-now' },
+          { label: '💬 Type Model Instead', value: 'type-model' },
+        ]
+      );
+      return;
+    }
+
+    // NOT SURE ABOUT BRAND
+    if (option.value === 'not-sure-brand') {
+      addBotMessage(
+        "No worries! Let's use a photo to identify your car. Please upload a clear photo of your vehicle.",
+        [{ label: '📷 Upload Car Photo', value: 'upload-car-photo-now' }]
+      );
+      setWaitingForImageType('car');
+      return;
+    }
+
+    // UPLOAD PHOTO INSTEAD (from welcome)
+    if (option.value === 'upload-photo-instead') {
+      addBotMessage(
+        "Perfect! Please upload a clear photo of your car. I'll identify the brand, model, and color.",
+        [{ label: '📷 Upload Photo', value: 'upload-car-photo-now' }]
+      );
+      setWaitingForImageType('car');
+      return;
+    }
+
+    // UPLOAD CAR PHOTO (after brand selection or from "not sure")
+    if (option.value === 'upload-car-photo-now') {
+      setWaitingForImageType('car');
+      addBotMessage("Great! Please upload a clear photo of your car.");
+      return;
+    }
+
+    // TYPE MODEL MANUALLY
+    if (option.value === 'type-model') {
+      addBotMessage("Sure! Please tell me your car's model and year (e.g., Camry 2020)");
+      return;
+    }
+
+    // UPLOAD VIN TAG
+    if (option.value === 'upload-vin-tag' || option.value === 'upload-vin-photo') {
+      setWaitingForImageType('vin');
+      addBotMessage(
+        "Perfect! Please upload a clear photo of your VIN tag/sticker.\n\n💡 **Tip:** The VIN tag is usually on the driver's door jamb and contains your exact paint code!"
+      );
+      return;
+    }
+
+    // FOUND PAINT CODE (user will type it)
+    if (option.value === 'found-paint-code') {
+      addBotMessage("Excellent! Please type your paint code exactly as it appears on the sticker.");
+      return;
+    }
+
+    // CONFIRM COLOR FROM PHOTO
+    if (option.value === 'confirm-yes' || option.value === 'confirm-vin-yes') {
+      addBotMessage(
+        "Perfect! Now let's find your exact paint code.\n\n**Important:** Car photos show the color, but there can be dozens of shades of the same color! For 100% accuracy, we need to find the paint code on your VIN sticker.\n\nWould you like to:",
+        [
+          { label: '📷 Upload VIN Photo', value: 'upload-vin-photo' },
+          { label: '🔍 I Found the Paint Code', value: 'found-paint-code' },
+          { label: '❓ Where is the VIN?', value: 'where-is-vin' },
+        ]
+      );
+      return;
+    }
+
+    // REJECT PHOTO ANALYSIS
+    if (option.value === 'confirm-no') {
+      addBotMessage(
+        "No problem! Let's try a different approach.",
+        [
+          { label: '📷 Upload Different Photo', value: 'upload-car-photo-now' },
+          { label: '💬 Type Car Details', value: 'type-model' },
+          { label: '🔄 Start Over', value: 'start-over' },
+        ]
+      );
+      return;
+    }
+
+    // WHERE IS VIN
+    if (option.value === 'where-is-vin') {
+      const brand = detectedInfo.brand || 'your vehicle';
+      addBotMessage(
+        `Here's where to find the VIN sticker on most ${brand} vehicles:\n\n` +
+        `📍 **Most Common Locations:**\n` +
+        `• Driver's side door jamb (open the door and look at the frame)\n` +
+        `• Inside the driver's door edge\n` +
+        `• Under the hood on the firewall\n\n` +
+        `Look for a white or silver sticker with codes like "PAINT", "C/TR", or "EXT".\n\n` +
+        `Ready to upload the VIN photo?`,
+        [
+          { label: '📷 Upload VIN Photo', value: 'upload-vin-photo' },
+          { label: '✍️ Type Paint Code', value: 'found-paint-code' },
+        ]
+      );
+      return;
+    }
+
+    // VIEW RESULTS
+    if (option.value === 'view-results') {
+      const url = buildResultUrl();
+      if (url) {
+        addBotMessage("Opening your personalized paint code page... 🎨");
+        // Track successful paint code lookup
+        trackAnalytics(true, detectedInfo.paintCode);
+        setTimeout(() => {
+          router.push(url);
+        }, 500);
+      } else {
+        // Track failed attempt
+        trackAnalytics(false);
+      }
+      return;
+    }
+
+    // START OVER
+    if (option.value === 'start-over') {
+      handleNewChat();
+      return;
+    }
+
+    // Default: send to AI chat
     sendToChat(option.label);
   };
 
