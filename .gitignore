@@ -42,3 +42,6 @@ next-env.d.ts
 
 # Local Netlify folder
 .netlify
+
+# Large data files (source CSVs - not needed in repo)
+ColorData/
