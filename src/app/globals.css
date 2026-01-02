@@ -60,3 +60,65 @@ body {
 .chat-scroll::-webkit-scrollbar-thumb:hover {
   background: var(--foreground);
 }
+
+/* Hero Animation Keyframes */
+@keyframes exhaust-puff {
+  0% {
+    opacity: 0.6;
+    transform: scale(0.8) translateY(0);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(1.2) translateY(-4px);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5) translateY(-8px);
+  }
+}
+
+@keyframes scan-beam {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scaleY(0.5);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scaleY(1);
+  }
+}
+
+@keyframes bubble-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 10px) scale(0.8);
+  }
+  50% {
+    transform: translate(-50%, 0) scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+.animate-exhaust-puff {
+  animation: exhaust-puff 1.2s ease-out infinite;
+}
+
+.animate-scan-beam {
+  animation: scan-beam 2s ease-in-out infinite;
+}
+
+.animate-bubble-pop {
+  animation: bubble-pop 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .animate-exhaust-puff,
+  .animate-scan-beam,
+  .animate-bubble-pop {
+    animation: none;
+  }
+}

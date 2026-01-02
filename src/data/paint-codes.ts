@@ -23,7 +23,7 @@ export const carBrands: CarBrand[] = [
           { code: '218', name: 'Midnight Black Metallic', hex: '#1C1C1C' },
           { code: '3T3', name: 'Ruby Flare Pearl', hex: '#8B2942' },
           { code: '8X8', name: 'Blueprint', hex: '#1E3A5F' },
-        ]
+        ] as any[]
       },
       {
         name: 'Corolla',
@@ -33,7 +33,7 @@ export const carBrands: CarBrand[] = [
           { code: '040', name: 'Super White', hex: '#FFFFFF' },
           { code: '1G3', name: 'Magnetic Gray Metallic', hex: '#6B6B6B' },
           { code: '3U5', name: 'Supersonic Red', hex: '#CC0000' },
-        ]
+        ] as any[]
       },
       {
         name: 'RAV4',
@@ -43,7 +43,7 @@ export const carBrands: CarBrand[] = [
           { code: '040', name: 'Super White', hex: '#FFFFFF' },
           { code: '8X8', name: 'Blueprint', hex: '#1E3A5F' },
           { code: '6X3', name: 'Lunar Rock', hex: '#A8A89C' },
-        ]
+        ] as any[]
       }
     ]
   },
@@ -64,7 +64,7 @@ export const carBrands: CarBrand[] = [
           { code: 'NH-731P', name: 'Crystal Black Pearl', hex: '#1C1C1C' },
           { code: 'B-593M', name: 'Aegean Blue Metallic', hex: '#1E4D6B' },
           { code: 'R-569M', name: 'Rallye Red', hex: '#CC0000' },
-        ]
+        ] as any[]
       },
       {
         name: 'Accord',
@@ -74,7 +74,7 @@ export const carBrands: CarBrand[] = [
           { code: 'NH-883P', name: 'Platinum White Pearl', hex: '#F5F5F5' },
           { code: 'NH-830M', name: 'Lunar Silver Metallic', hex: '#C0C0C0' },
           { code: 'B-588P', name: 'Obsidian Blue Pearl', hex: '#1A2B4C' },
-        ]
+        ] as any[]
       },
       {
         name: 'CR-V',
@@ -84,7 +84,7 @@ export const carBrands: CarBrand[] = [
           { code: 'NH-883P', name: 'Platinum White Pearl', hex: '#F5F5F5' },
           { code: 'NH-731P', name: 'Crystal Black Pearl', hex: '#1C1C1C' },
           { code: 'R-580P', name: 'Radiant Red Metallic II', hex: '#8B0000' },
-        ]
+        ] as any[]
       }
     ]
   },
@@ -110,7 +110,7 @@ export const carBrands: CarBrand[] = [
               amazon: 'https://www.amazon.com/dp/B09GRYMGSN'
             }
           },
-        ]
+        ] as any[]
       }
     ]
   },
@@ -131,7 +131,7 @@ export const carBrands: CarBrand[] = [
           { code: 'UM', name: 'Agate Black Metallic', hex: '#1C1C1C' },
           { code: 'JS', name: 'Iconic Silver Metallic', hex: '#C0C0C0' },
           { code: 'E1', name: 'Velocity Blue Metallic', hex: '#0047AB' },
-        ]
+        ] as any[]
       },
       {
         name: 'Mustang',
@@ -142,7 +142,7 @@ export const carBrands: CarBrand[] = [
           { code: 'G1', name: 'Shadow Black', hex: '#1C1C1C' },
           { code: 'D4', name: 'Race Red', hex: '#CC0000' },
           { code: 'B5', name: 'Grabber Blue', hex: '#0080FF' },
-        ]
+        ] as any[]
       }
     ]
   },
@@ -163,7 +163,7 @@ export const carBrands: CarBrand[] = [
           { code: 'GBA', name: 'Black', hex: '#1C1C1C' },
           { code: 'G9K', name: 'Northsky Blue Metallic', hex: '#1E3A5F' },
           { code: 'GAN', name: 'Red Hot', hex: '#CC0000' },
-        ]
+        ] as any[]
       },
       {
         name: 'Camaro',
@@ -174,7 +174,7 @@ export const carBrands: CarBrand[] = [
           { code: 'GBA', name: 'Black', hex: '#1C1C1C' },
           { code: 'G7Q', name: 'Crush', hex: '#FF4500' },
           { code: 'GKK', name: 'Riverside Blue Metallic', hex: '#0047AB' },
-        ]
+        ] as any[]
       }
     ]
   }

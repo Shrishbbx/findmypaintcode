@@ -142,6 +142,13 @@ export default async function PaintCodeResultPage({ params, searchParams }: Page
     } as any; // Type cast for AI-detected colors without full RGB data
   }
 
+  // At this point, paintCode is guaranteed to be defined (either from DB or fallback)
+  // TypeScript doesn't understand this, so we assert it's defined
+  if (!paintCode) {
+    // This should never happen, but satisfies TypeScript
+    notFound();
+  }
+
   // Get code locations (use researched data if available, otherwise fall back to database)
   const researchedLocations = locationsParam ? (() => {
     try {
@@ -172,11 +179,12 @@ export default async function PaintCodeResultPage({ params, searchParams }: Page
 
   // Use hex color from URL if provided, otherwise use from database
   // Use base color from new database if available
-  const hexColor = hexFromUrl || paintCodeFromDb?.hex.base || paintCode.hex;
+  const hexColorRaw = hexFromUrl || paintCodeFromDb?.hex.base || paintCode?.hex;
+  const hexColor = typeof hexColorRaw === 'string' ? hexColorRaw : (hexColorRaw as PaintCodeHex)?.base;
 
   // Build Amazon link from ASIN (example format)
   // In production, this would come from your CSV data with actual ASINs
-  const amazonLink = paintCode.purchaseLinks?.amazon || 'https://www.amazon.com/s?k=automotive+touch+up+paint';
+  const amazonLink = paintCode?.purchaseLinks?.amazon || 'https://www.amazon.com/s?k=automotive+touch+up+paint';
 
   return (
     <div className="min-h-screen bg-white">

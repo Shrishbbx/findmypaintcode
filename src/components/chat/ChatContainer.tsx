@@ -837,7 +837,7 @@ export function ChatContainer() {
       if (url) {
         addBotMessage("Opening your personalized paint code page... 🎨");
         // Track successful paint code lookup
-        trackAnalytics(true, detectedInfo.paintCode);
+        trackAnalytics(true, detectedInfo.paintCode ?? undefined);
         setTimeout(() => {
           router.push(url);
         }, 500);

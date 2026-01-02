@@ -49,7 +49,7 @@ export interface PaintDatabase {
   };
 }
 
-const db = paintDatabase as PaintDatabase;
+const db = paintDatabase as any as PaintDatabase;
 
 /**
  * Search for paint codes by brand and code
