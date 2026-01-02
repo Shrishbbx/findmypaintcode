@@ -164,6 +164,7 @@ export default function Home() {
           >
             ERAPAINTS
           </a>
+          {' '} · <span className="text-xs">v1.0 - Auto-Deploy ✨</span>
         </p>
       </footer>
     </div>
