@@ -555,7 +555,7 @@ export function ChatContainer() {
           ...prev,
           brand: vinData.brand || prev.brand,
           model: vinData.model || prev.model,
-          year: vinData.year ? vinData.year.toString() : prev.year,
+          year: vinData.year || prev.year,
           paintCode: paintCodeData?.code || vinData.paintCode || prev.paintCode,
           colorName: paintCodeData?.colorName || vinData.colorName || prev.colorName,
           hexColor: paintCodeData?.hexBase || vinData.hexColor || prev.hexColor,
@@ -794,7 +794,7 @@ export function ChatContainer() {
           ...prev,
           brand: parsed.brand,
           model: parsed.model || prev.model,
-          year: parsed.year ? parsed.year.toString() : prev.year,
+          year: parsed.year || prev.year,
         }));
 
         if (parsed.brand && parsed.model && parsed.year) {
@@ -837,7 +837,7 @@ export function ChatContainer() {
           setDetectedInfo(prev => ({
             ...prev,
             model: modelYear.model || prev.model,
-            year: modelYear.year ? modelYear.year.toString() : prev.year,
+            year: modelYear.year || prev.year,
           }));
 
           if (modelYear.model && modelYear.year) {
