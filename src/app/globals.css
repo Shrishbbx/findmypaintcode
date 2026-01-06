@@ -102,6 +102,36 @@ body {
   }
 }
 
+/* Laser Scanner Animations */
+@keyframes laser-scan {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes laser-pulse {
+  0%, 100% {
+    opacity: 0.8;
+    transform: translateX(-50%) scaleX(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(-50%) scaleX(1.5);
+  }
+}
+
+@keyframes laser-glow {
+  0%, 100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
 .animate-exhaust-puff {
   animation: exhaust-puff 1.2s ease-out infinite;
 }
@@ -114,11 +144,26 @@ body {
   animation: bubble-pop 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
 }
 
+.animate-laser-scan {
+  animation: laser-scan 1s ease-in-out infinite;
+}
+
+.animate-laser-pulse {
+  animation: laser-pulse 0.8s ease-in-out infinite;
+}
+
+.animate-laser-glow {
+  animation: laser-glow 1.2s ease-in-out infinite;
+}
+
 /* Respect user's motion preferences */
 @media (prefers-reduced-motion: reduce) {
   .animate-exhaust-puff,
   .animate-scan-beam,
-  .animate-bubble-pop {
+  .animate-bubble-pop,
+  .animate-laser-scan,
+  .animate-laser-pulse,
+  .animate-laser-glow {
     animation: none;
   }
 }

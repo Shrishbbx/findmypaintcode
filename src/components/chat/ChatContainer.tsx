@@ -7,30 +7,32 @@ import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { ChatOptions } from './ChatOptions';
 import { ChatSidebar } from './ChatSidebar';
+import { getCommonBrands, matchBrandName, getBrandLocationData } from '@/lib/brand-helpers';
+import { parseVehicleInput, parseModelAndYear } from '@/lib/input-parser';
 
 // Generate unique ID
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
-// Enhanced Welcome message - Start with brand selection
-const getWelcomeMessage = (): ChatMessageType => ({
-  id: generateId(),
-  type: 'bot',
-  content: "Hi! I'm your Paint Code Expert. I'll help you find the exact paint code for your car.\n\nLet's start! What's your car brand?",
-  timestamp: new Date(),
-  options: [
-    { label: 'Toyota', value: 'brand-toyota' },
-    { label: 'Honda', value: 'brand-honda' },
-    { label: 'Ford', value: 'brand-ford' },
-    { label: 'Chevrolet', value: 'brand-chevrolet' },
-    { label: 'BMW', value: 'brand-bmw' },
-    { label: 'Mercedes', value: 'brand-mercedes' },
-    { label: 'Nissan', value: 'brand-nissan' },
-    { label: 'Acura', value: 'brand-acura' },
-    { label: 'Other Brand', value: 'brand-other' },
-    { label: '🤷 Not Sure', value: 'not-sure-brand' },
-    { label: '📷 Upload Photo Instead', value: 'upload-photo-instead' },
-  ],
-});
+// Enhanced Welcome message - Start with brand selection (dynamic brands from database)
+const getWelcomeMessage = (): ChatMessageType => {
+  const commonBrands = getCommonBrands();
+
+  return {
+    id: generateId(),
+    type: 'bot',
+    content: "Hi! I'm your Paint Code Expert. I'll help you find the exact paint code for your car.\n\nLet's start! What's your car brand?\n\n*You can also type your brand and model together, like 'Toyota Fortuner'*",
+    timestamp: new Date(),
+    options: [
+      ...commonBrands.map(brand => ({
+        label: brand,
+        value: `brand-${brand.toLowerCase().replace(/\s+/g, '-')}`
+      })),
+      { label: 'Other Brand', value: 'brand-other' },
+      { label: '🤷 Not Sure', value: 'not-sure-brand' },
+      { label: '📷 Upload Photo Instead', value: 'upload-photo-instead' },
+    ],
+  };
+};
 
 interface ChatHistoryItem {
   id: string;
@@ -388,33 +390,79 @@ export function ChatContainer() {
         const analysis = data.analysis;
         setImageAnalysis(analysis);
 
+        // Check if this is a VIN tag or car photo
+        const isVinTag = analysis.imageType === 'vin_tag';
+
         if (analysis.make) {
           setDetectedInfo(prev => ({
             ...prev,
             brand: analysis.make,
             model: analysis.model,
+            imageType: isVinTag ? 'vin' : 'car',
           }));
         }
 
-        let message = "Here's what I found from your photo:\n\n";
+        let message = "";
 
-        if (analysis.make && analysis.model) {
-          message += `**Vehicle:** ${analysis.make} ${analysis.model}`;
-          if (analysis.yearRange) message += ` (${analysis.yearRange})`;
-          message += '\n';
+        if (isVinTag) {
+          // VIN TAG DETECTED
+          message = "🏷️ **VIN Tag Detected!** I can see your vehicle certification label.\n\n";
+
+          if (analysis.paintCode) {
+            // Paint code found on VIN tag!
+            message += `**✅ Paint Code Found:** ${analysis.paintCode}\n`;
+            setDetectedInfo(prev => ({
+              ...prev,
+              paintCode: analysis.paintCode,
+            }));
+          }
+
+          if (analysis.vinTagDetails) {
+            if (analysis.vinTagDetails.paintCodeLabel) {
+              message += `**Label Type:** ${analysis.vinTagDetails.paintCodeLabel}\n`;
+            }
+            if (analysis.vinTagDetails.vinNumber) {
+              message += `**VIN:** ${analysis.vinTagDetails.vinNumber}\n`;
+            }
+            if (analysis.vinTagDetails.rawTextNearCode) {
+              message += `**Nearby Text:** ${analysis.vinTagDetails.rawTextNearCode}\n`;
+            }
+          }
+
+          if (analysis.make) {
+            message += `**Manufacturer:** ${analysis.make}\n`;
+          }
+
+          message += `\n**Confidence:** ${analysis.confidence || 'medium'}\n\n`;
+
+          if (analysis.paintCode) {
+            message += "I found your paint code on the VIN tag! Does this look correct?";
+          } else {
+            message += "I detected a VIN tag but couldn't clearly read the paint code. Could you try taking another photo with better focus on the paint code section?";
+          }
+
+        } else {
+          // CAR PHOTO
+          message = "📸 **Car Photo Analysis:**\n\n";
+
+          if (analysis.make && analysis.model) {
+            message += `**Vehicle:** ${analysis.make} ${analysis.model}`;
+            if (analysis.yearRange) message += ` (${analysis.yearRange})`;
+            message += '\n';
+          }
+
+          if (analysis.colorDescription) {
+            message += `**Color:** ${analysis.colorDescription}\n`;
+          }
+
+          if (analysis.possiblePaintCodes?.length > 0) {
+            message += `**Possible Paint Codes:** ${analysis.possiblePaintCodes.join(', ')}\n`;
+          }
+
+          message += `\n**Confidence:** ${analysis.confidence || 'medium'}\n\n`;
+
+          message += "Does this look correct?";
         }
-
-        if (analysis.colorDescription) {
-          message += `**Color:** ${analysis.colorDescription}\n`;
-        }
-
-        if (analysis.possiblePaintCodes?.length > 0) {
-          message += `**Possible Paint Codes:** ${analysis.possiblePaintCodes.join(', ')}\n`;
-        }
-
-        message += `\n**Confidence:** ${analysis.confidence || 'medium'}\n\n`;
-
-        message += "Does this look correct?";
 
         const options: ChatOption[] = [
           { label: '✅ Yes, that\'s correct', value: 'confirm-yes' },
@@ -474,17 +522,55 @@ export function ChatContainer() {
       if (data.success && data.vinData) {
         const vinData = data.vinData;
 
-        // Update detected info with VIN data
+        // If we have a paint code, look it up in the database
+        let paintCodeData = null;
+        if (vinData.paintCode && vinData.brand) {
+          try {
+            const lookupResponse = await fetch('/api/lookup-paint-code', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                brand: vinData.brand,
+                code: vinData.paintCode,
+              }),
+            });
+
+            const lookupData = await lookupResponse.json();
+
+            if (lookupData.success && lookupData.found) {
+              paintCodeData = lookupData.data;
+            } else if (lookupData.fallbackToWebSearch) {
+              // Paint code not in database - will trigger web search later
+              addBotMessage(
+                `Great! I extracted **${vinData.paintCode}** from the VIN tag. It's not in my database yet, but I'll search trusted sources to find the accurate color information for you.`
+              );
+            }
+          } catch (error) {
+            console.error('Paint code lookup error:', error);
+          }
+        }
+
+        // Update detected info with VIN data and database lookup results
         setDetectedInfo(prev => ({
           ...prev,
           brand: vinData.brand || prev.brand,
           model: vinData.model || prev.model,
-          year: vinData.year || prev.year,
-          paintCode: vinData.paintCode || prev.paintCode,
-          colorName: vinData.colorName || prev.colorName,
-          hexColor: vinData.hexColor || prev.hexColor,
+          year: vinData.year ? vinData.year.toString() : prev.year,
+          paintCode: paintCodeData?.code || vinData.paintCode || prev.paintCode,
+          colorName: paintCodeData?.colorName || vinData.colorName || prev.colorName,
+          hexColor: paintCodeData?.hexBase || vinData.hexColor || prev.hexColor,
           vinNumber: vinData.vin,
           imageType: 'vin',
+          // Store RGB and product data if found in database
+          ...(paintCodeData && {
+            rgbHighlight: paintCodeData.rgbHighlight,
+            rgbBase: paintCodeData.rgbBase,
+            rgbShadow: paintCodeData.rgbShadow,
+            paintType: paintCodeData.type,
+            paintGloss: paintCodeData.gloss,
+            price: paintCodeData.price,
+            asins: paintCodeData.asins,
+          }),
         }));
 
         let message = "Perfect! Here's what I found on your VIN tag:\n\n";
@@ -697,6 +783,81 @@ export function ChatContainer() {
 
   const handleTextSubmit = (text: string) => {
     addUserMessage(text);
+
+    // Smart parsing for welcome stage - detect brand + model together
+    if (stage === 'welcome' || stage === 'gathering_info') {
+      const parsed = parseVehicleInput(text);
+
+      if (parsed.confidence > 0.5 && parsed.brand) {
+        // We detected a brand with good confidence
+        setDetectedInfo(prev => ({
+          ...prev,
+          brand: parsed.brand,
+          model: parsed.model || prev.model,
+          year: parsed.year ? parsed.year.toString() : prev.year,
+        }));
+
+        if (parsed.brand && parsed.model && parsed.year) {
+          // All three detected - skip to color verification
+          setStage('gathering_info');
+          addBotMessage(
+            `Perfect! I understand you have a ${parsed.year} ${parsed.brand} ${parsed.model}. Now, please upload a photo of your car so I can identify the color.`,
+            [
+              { label: '📷 Upload Car Photo', value: 'upload-car-photo-now' },
+              { label: '💬 Type Color Instead', value: 'type-color' },
+            ]
+          );
+          return;
+        } else if (parsed.brand && parsed.model) {
+          // Brand and model detected - ask for year
+          setStage('gathering_info');
+          addBotMessage(
+            `Great! I see you have a ${parsed.brand} ${parsed.model}. What year is it?`,
+            []
+          );
+          return;
+        } else if (parsed.brand) {
+          // Only brand detected - ask for model
+          setStage('gathering_info');
+          addBotMessage(
+            `Perfect! You have a ${parsed.brand}. Now, please upload a photo of your car to identify the model and color.`,
+            [
+              { label: '📷 Upload Car Photo', value: 'upload-car-photo-now' },
+              { label: '💬 Type Model Instead', value: 'type-model' },
+            ]
+          );
+          return;
+        }
+      }
+
+      // If we're in gathering_info and already have a brand, try to parse model/year
+      if (stage === 'gathering_info' && detectedInfo.brand && !parsed.brand) {
+        const modelYear = parseModelAndYear(text);
+        if (modelYear.model || modelYear.year) {
+          setDetectedInfo(prev => ({
+            ...prev,
+            model: modelYear.model || prev.model,
+            year: modelYear.year ? modelYear.year.toString() : prev.year,
+          }));
+
+          if (modelYear.model && modelYear.year) {
+            addBotMessage(
+              `Excellent! ${modelYear.year} ${detectedInfo.brand} ${modelYear.model}. Please upload a photo so I can identify the color.`,
+              [{ label: '📷 Upload Car Photo', value: 'upload-car-photo-now' }]
+            );
+            return;
+          } else if (modelYear.model) {
+            addBotMessage(`Got it! ${detectedInfo.brand} ${modelYear.model}. What year is it?`);
+            return;
+          } else if (modelYear.year) {
+            addBotMessage(`Okay, ${modelYear.year} ${detectedInfo.brand}. What's the model?`);
+            return;
+          }
+        }
+      }
+    }
+
+    // Default: send to AI chat for processing
     sendToChat(text);
   };
 
@@ -788,8 +949,43 @@ export function ChatContainer() {
 
     // CONFIRM COLOR FROM PHOTO
     if (option.value === 'confirm-yes' || option.value === 'confirm-vin-yes') {
+      // Check if paint code was already found from VIN tag
+      if (detectedInfo.paintCode && detectedInfo.brand) {
+        // Check if we have model and year too
+        if (!detectedInfo.model || !detectedInfo.year) {
+          // Need model and year - ask for them
+          addBotMessage(
+            `Great! I found your paint code (**${detectedInfo.paintCode}**) from the VIN tag.\n\n` +
+            `To show you the complete information, I need to know your vehicle model and year.\n\n` +
+            `What's your vehicle model?`,
+            []
+          );
+          // Set up for model selection
+          setDetectedInfo(prev => ({ ...prev, brand: detectedInfo.brand }));
+          return;
+        }
+
+        // Have everything - go straight to results!
+        addBotMessage(
+          `Perfect! I have all the information I need:\n\n` +
+          `✅ **Brand:** ${detectedInfo.brand}\n` +
+          `✅ **Model:** ${detectedInfo.model}\n` +
+          `✅ **Year:** ${detectedInfo.year}\n` +
+          `✅ **Paint Code:** ${detectedInfo.paintCode}\n\n` +
+          `Let me show you the complete information about your paint code!`,
+          [
+            { label: '🎨 View My Paint Code', value: 'view-results' },
+          ]
+        );
+        return;
+      }
+
+      // No paint code yet - ask for VIN upload (enhanced copy from frontend-design-copywriter)
       addBotMessage(
-        "Perfect! Now let's find your exact paint code.\n\n**Important:** Car photos show the color, but there can be dozens of shades of the same color! For 100% accuracy, we need to find the paint code on your VIN sticker.\n\nWould you like to:",
+        "Perfect! Now let's confirm your exact shade.\n\n" +
+        "**Here's why this matters:** AI detected your color, but manufacturers often make 20-40 similar shades of the same color! " +
+        "Your VIN sticker has the precise code that ensures a perfect match—no guesswork.\n\n" +
+        "Ready to find it?",
         [
           { label: '📷 Upload VIN Photo', value: 'upload-vin-photo' },
           { label: '🔍 I Found the Paint Code', value: 'found-paint-code' },
@@ -812,22 +1008,47 @@ export function ChatContainer() {
       return;
     }
 
-    // WHERE IS VIN
+    // WHERE IS VIN - Enhanced with brand-specific location data
     if (option.value === 'where-is-vin') {
-      const brand = detectedInfo.brand || 'your vehicle';
-      addBotMessage(
-        `Here's where to find the VIN sticker on most ${brand} vehicles:\n\n` +
-        `📍 **Most Common Locations:**\n` +
-        `• Driver's side door jamb (open the door and look at the frame)\n` +
-        `• Inside the driver's door edge\n` +
-        `• Under the hood on the firewall\n\n` +
-        `Look for a white or silver sticker with codes like "PAINT", "C/TR", or "EXT".\n\n` +
-        `Ready to upload the VIN photo?`,
-        [
-          { label: '📷 Upload VIN Photo', value: 'upload-vin-photo' },
-          { label: '✍️ Type Paint Code', value: 'found-paint-code' },
-        ]
-      );
+      const brand = detectedInfo.brand || '';
+      const locationData = brand ? getBrandLocationData(brand) : null;
+
+      if (locationData && locationData.detailedSteps.length > 0) {
+        // Use brand-specific detailed instructions
+        const stepsText = locationData.detailedSteps
+          .map((step, index) => `${index + 1}. ${step}`)
+          .join('\n');
+
+        const paintCodeLabel = locationData.paintCodeLabel
+          ? `\n\n**Look for:** "${locationData.paintCodeLabel}" on the sticker`
+          : '';
+
+        addBotMessage(
+          `Great! Here's exactly where to find the paint code on your **${brand}**:\n\n` +
+          `${stepsText}${paintCodeLabel}\n\n` +
+          `${locationData.notes || ''}\n\n` +
+          `Ready to upload the VIN photo?`,
+          [
+            { label: '📷 Upload VIN Photo', value: 'upload-vin-photo' },
+            { label: '✍️ Type Paint Code', value: 'found-paint-code' },
+          ]
+        );
+      } else {
+        // Fallback to generic instructions if no brand-specific data
+        addBotMessage(
+          `Here's where to find the VIN sticker on most vehicles:\n\n` +
+          `📍 **Most Common Locations:**\n` +
+          `• Driver's side door jamb (open the door and look at the frame)\n` +
+          `• Inside the driver's door edge\n` +
+          `• Under the hood on the firewall\n\n` +
+          `Look for a white or silver sticker with codes like "PAINT", "C/TR", or "EXT".\n\n` +
+          `Ready to upload the VIN photo?`,
+          [
+            { label: '📷 Upload VIN Photo', value: 'upload-vin-photo' },
+            { label: '✍️ Type Paint Code', value: 'found-paint-code' },
+          ]
+        );
+      }
       return;
     }
 

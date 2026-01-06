@@ -15,22 +15,61 @@ interface Car {
   showMessage: boolean;
 }
 
-const SPEECH_BUBBLES = [
-  "Oh! My code is 7XZ 🎨",
-  "That was so easy! ✨",
-  "Found it! Code: ABC123 🚗",
-  "Perfect match! 💯",
-  "Wow, instant results! ⚡"
+interface HeroAnimationProps {
+  onScanningChange?: (isScanning: boolean) => void;
+}
+
+// Real customer emotions - authentic journey from confusion to confidence
+const PAINT_CODE_MESSAGES = [
+  // Relief & Ease
+  { message: "So easy! My code is 040", emoji: "✨" },
+  { message: "Way easier than I thought: NH-883P", emoji: "🚗" },
+  { message: "Finally found it: 218", emoji: "💯" },
+  { message: "That was simple! Code: 1F7", emoji: "⚡" },
+  { message: "Easier than searching! GAZ", emoji: "✓" },
+
+  // Confusion Resolved
+  { message: "I was so lost before: 3T3", emoji: "🎨" },
+  { message: "No more guessing: YZ", emoji: "🔥" },
+  { message: "Door jamb made sense: E1", emoji: "✨" },
+  { message: "Finally understand: NH-731P", emoji: "💯" },
+  { message: "All the numbers made sense: 8X8", emoji: "🚗" },
+
+  // Confidence to Order
+  { message: "Ready to order: B-593M", emoji: "⚡" },
+  { message: "I can order now! D4", emoji: "🔥" },
+  { message: "Perfect match: R-569M", emoji: "✨" },
+  { message: "Exactly what I needed: GBA", emoji: "✓" },
+  { message: "Ordering with confidence: 3U5", emoji: "💯" },
+
+  // Discovery & Excitement
+  { message: "There it is: UM", emoji: "🎨" },
+  { message: "My exact color: GAN", emoji: "🚗" },
+  { message: "Found my code: B5", emoji: "⚡" },
+  { message: "This is it: 6X3", emoji: "✨" },
+  { message: "Right paint: NH-830M", emoji: "💯" },
+
+  // Pain Point Acknowledgment
+  { message: "Saved me so much time: G9K", emoji: "🔥" },
+  { message: "No more door jamb confusion: B-588P", emoji: "✓" },
+  { message: "Wish I found this sooner: YR506M", emoji: "🎨" },
+  { message: "Finally the right info: G7Q", emoji: "🚗" },
+  { message: "This beats guessing: 040", emoji: "⚡" },
 ];
 
 const CAR_SPEED = 0.15; // pixels per ms
-const STOP_DURATION = 2000; // 2 seconds
-const SCAN_DURATION = 1000; // 1 second
+const STOP_DURATION = 1500; // 1.5 seconds - reduced for faster flow
+const SCAN_DURATION = 1500; // 1.5 seconds - glow proceeds gradually
 const MESSAGE_DURATION = 2000; // 2 seconds
-const MIN_DISTANCE_BETWEEN_CARS = 200; // pixels
+const MIN_DISTANCE_BETWEEN_CARS = 250; // pixels - spacing between cars
+const SPAWN_ON_SCAN = true; // Spawn new car when car reaches center
+const MIN_SPAWN_INTERVAL = 300; // Minimum 300ms between spawns (safety check)
 const CAR_WIDTH = 96; // pixels (w-24 = 96px)
+const CAR_HORIZONTAL_OFFSET = 0; // No offset needed
+const DECELERATION_DISTANCE = 50; // Start slowing down 50px before button
+const ACCELERATION_DISTANCE = 80; // Gradually accelerate over 80px when leaving
 
-export function HeroAnimation() {
+export function HeroAnimation({ onScanningChange }: HeroAnimationProps = {}) {
   const [cars, setCars] = useState<Car[]>([]);
   const [isPaused, setIsPaused] = useState(false);
   const [buttonPosition, setButtonPosition] = useState(0);
@@ -41,6 +80,15 @@ export function HeroAnimation() {
   const buttonRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number | undefined>(undefined);
   const lastTimeRef = useRef<number>(0);
+  const lastSpawnTimeRef = useRef<number>(0); // Track when last car spawned
+
+  // Notify parent when scanning state changes - glow appears when car stops at center
+  useEffect(() => {
+    const isScanning = cars.some(car =>
+      car.state === 'at-button-stopped' || car.state === 'at-button-scanning'
+    );
+    onScanningChange?.(isScanning);
+  }, [cars, onScanningChange]);
 
   // Get button position and screen width
   useEffect(() => {
@@ -64,15 +112,19 @@ export function HeroAnimation() {
 
     const carImages = ['/cars/car-1.svg', '/cars/car-2.svg', '/cars/car-3.svg'];
     const randomCar = carImages[Math.floor(Math.random() * carImages.length)];
-    const randomMessage = SPEECH_BUBBLES[Math.floor(Math.random() * SPEECH_BUBBLES.length)];
+    const randomPaintCode = PAINT_CODE_MESSAGES[Math.floor(Math.random() * PAINT_CODE_MESSAGES.length)];
+    const fullMessage = `${randomPaintCode.message} ${randomPaintCode.emoji}`;
+
+    const now = Date.now();
+    lastSpawnTimeRef.current = now;
 
     setCars([{
-      id: Date.now(),
+      id: now,
       image: randomCar,
       position: -CAR_WIDTH,
       state: 'driving',
-      stateStartTime: Date.now(),
-      message: randomMessage,
+      stateStartTime: now,
+      message: fullMessage,
       showMessage: false
     }]);
   }, [screenWidth]);
@@ -105,25 +157,36 @@ export function HeroAnimation() {
 
           switch (car.state) {
             case 'driving':
-              newPosition += CAR_SPEED * deltaTime;
+              // Target position: center of car aligned with button center
+              const targetStopPosition = buttonPosition - CAR_WIDTH / 2;
+              const distanceToTarget = targetStopPosition - car.position;
 
-              // Check if reached button position
-              if (newPosition >= buttonPosition - CAR_WIDTH / 2) {
-                if (carAheadAtButton) {
-                  // Wait behind
-                  newState = 'waiting';
-                  newPosition = buttonPosition - CAR_WIDTH / 2 - MIN_DISTANCE_BETWEEN_CARS;
-                } else {
-                  // Stop at button
-                  newPosition = buttonPosition;
+              // Check if we're approaching the button and there's a car there
+              if (distanceToTarget <= MIN_DISTANCE_BETWEEN_CARS && carAheadAtButton) {
+                // Stop here and wait - don't jump, just hold position
+                newState = 'waiting';
+                newPosition = car.position; // Keep current position
+              } else if (distanceToTarget <= DECELERATION_DISTANCE && !carAheadAtButton) {
+                // Start decelerating as we approach the button
+                if (distanceToTarget <= 2) {
+                  // Close enough - snap to exact position and stop
+                  newPosition = targetStopPosition;
                   newState = 'at-button-stopped';
                   newStateStartTime = now;
+                } else {
+                  // Smoothly decelerate - move fraction of remaining distance
+                  const slowdownFactor = Math.max(0.1, distanceToTarget / DECELERATION_DISTANCE);
+                  newPosition = car.position + (CAR_SPEED * deltaTime * slowdownFactor);
                 }
+              } else {
+                // Keep driving normally at full speed
+                newPosition = car.position + CAR_SPEED * deltaTime;
               }
               break;
 
             case 'waiting':
-              // Check if button is free
+              // Keep current position, check if button is free
+              newPosition = car.position; // Hold position while waiting
               if (!carAheadAtButton) {
                 newState = 'driving';
               }
@@ -146,7 +209,20 @@ export function HeroAnimation() {
               break;
 
             case 'leaving':
-              newPosition += CAR_SPEED * deltaTime;
+              // Gradual acceleration when leaving (opposite of deceleration)
+              // Calculate distance from the stop position (center of car at button center)
+              const stopPosition = buttonPosition - CAR_WIDTH / 2;
+              const distanceTraveled = newPosition - stopPosition;
+
+              if (distanceTraveled < ACCELERATION_DISTANCE) {
+                // Accelerate from ~10% to 100% speed over ACCELERATION_DISTANCE
+                const accelerationProgress = Math.max(0, distanceTraveled / ACCELERATION_DISTANCE);
+                const accelerationFactor = 0.1 + (0.9 * accelerationProgress);
+                newPosition += CAR_SPEED * deltaTime * accelerationFactor;
+              } else {
+                // Full speed after acceleration phase
+                newPosition += CAR_SPEED * deltaTime;
+              }
 
               // Show message shortly after leaving
               if (!car.showMessage && newPosition > buttonPosition + 80) {
@@ -173,22 +249,41 @@ export function HeroAnimation() {
         // Remove cars that have driven off-screen
         const visibleCars = updatedCars.filter(car => car.position < screenWidth + CAR_WIDTH);
 
-        // Add new car if there's space
-        const lastCar = visibleCars[visibleCars.length - 1];
-        const canSpawnNewCar = !lastCar || lastCar.position > MIN_DISTANCE_BETWEEN_CARS;
+        // Trigger spawn when a car reaches center (for continuous flow)
+        const carJustReachedCenter = updatedCars.some((car, idx) => {
+          const prevCar = prevCars[idx];
+          return prevCar &&
+                 prevCar.state === 'driving' &&
+                 car.state === 'at-button-stopped';
+        });
 
-        if (canSpawnNewCar && visibleCars.length < 3) {
+        // Safety check: ensure minimum time between spawns (only for fallback spawning)
+        const timeSinceLastSpawn = now - lastSpawnTimeRef.current;
+        const canSpawnBasedOnTime = timeSinceLastSpawn >= MIN_SPAWN_INTERVAL;
+
+        // Spawn conditions: immediate trigger when car reaches center, no position checks
+        const lastCar = visibleCars[visibleCars.length - 1];
+        const hasPositionSpace = !lastCar || lastCar.position > MIN_DISTANCE_BETWEEN_CARS;
+
+        // Primary: spawn immediately when car reaches center (simultaneous flow)
+        // Fallback: spawn based on position if no cars at center yet
+        const shouldSpawn = carJustReachedCenter || (hasPositionSpace && canSpawnBasedOnTime);
+
+        if (shouldSpawn && visibleCars.length < 3) {
           const carImages = ['/cars/car-1.svg', '/cars/car-2.svg', '/cars/car-3.svg'];
           const randomCar = carImages[Math.floor(Math.random() * carImages.length)];
-          const randomMessage = SPEECH_BUBBLES[Math.floor(Math.random() * SPEECH_BUBBLES.length)];
+          const randomPaintCode = PAINT_CODE_MESSAGES[Math.floor(Math.random() * PAINT_CODE_MESSAGES.length)];
+          const fullMessage = `${randomPaintCode.message} ${randomPaintCode.emoji}`;
+
+          lastSpawnTimeRef.current = now;
 
           visibleCars.push({
-            id: Date.now(),
+            id: now,
             image: randomCar,
             position: -CAR_WIDTH,
             state: 'driving',
             stateStartTime: now,
-            message: randomMessage,
+            message: fullMessage,
             showMessage: false
           });
         }
@@ -280,36 +375,28 @@ export function HeroAnimation() {
         {/* Cars */}
         {cars.map(car => {
           const showExhaust = car.state === 'driving' || car.state === 'leaving';
-          const showScanBeam = car.state === 'at-button-scanning';
 
           return (
             <div
               key={car.id}
-              className="absolute bottom-16"
+              className="absolute bottom-9"
               style={{
-                left: `${car.position + 20}px`,
+                left: `${car.position + CAR_HORIZONTAL_OFFSET}px`,
               }}
             >
-              {/* Exhaust Puffs */}
+              {/* Exhaust Puffs - positioned to touch the back of the car */}
               {showExhaust && (
                 <>
-                  <div className="absolute -left-20 bottom-2 animate-exhaust-puff">
+                  <div className="absolute -left-4 bottom-2 animate-exhaust-puff">
                     <div className="w-6 h-6 rounded-full bg-gray-400/40 blur-sm" />
                   </div>
-                  <div className="absolute -left-24 bottom-1 animate-exhaust-puff" style={{ animationDelay: '0.3s' }}>
+                  <div className="absolute -left-8 bottom-1 animate-exhaust-puff" style={{ animationDelay: '0.3s' }}>
                     <div className="w-5 h-5 rounded-full bg-gray-400/30 blur-sm" />
                   </div>
-                  <div className="absolute -left-28 bottom-0 animate-exhaust-puff" style={{ animationDelay: '0.6s' }}>
+                  <div className="absolute -left-12 bottom-0 animate-exhaust-puff" style={{ animationDelay: '0.6s' }}>
                     <div className="w-4 h-4 rounded-full bg-gray-400/20 blur-md" />
                   </div>
                 </>
-              )}
-
-              {/* Scanning Beam */}
-              {showScanBeam && (
-                <div className="absolute -top-44 -translate-x-1/2 w-24 h-44 animate-scan-beam pointer-events-none" style={{ left: '18px' }}>
-                  <div className="w-full h-full bg-gradient-to-b from-blue-500/0 via-blue-400/60 to-purple-500/40 blur-sm" />
-                </div>
               )}
 
               {/* Car Image */}

@@ -9,6 +9,7 @@ import { HeroAnimation } from '@/components/ui/HeroAnimation';
 export default function Home() {
   const [showChat, setShowChat] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isScanning, setIsScanning] = useState(false);
 
   useEffect(() => {
     // Show loading animation for 3.5 seconds on initial load
@@ -57,19 +58,39 @@ export default function Home() {
                 paint match for your specific make, model, and year.
               </p>
 
-              {/* CTA Button */}
-              <button
-                onClick={() => setShowChat(true)}
-                className="inline-flex items-center gap-2 px-8 py-4 bg-blue-600 text-white text-lg font-semibold rounded-full hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200 transition-all shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30"
-              >
-                Find My Paint Code
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                  <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
-                </svg>
-              </button>
+              {/* CTA Button with Laser Scanner */}
+              <div className="relative inline-block">
+                <button
+                  onClick={() => setShowChat(true)}
+                  className="inline-flex items-center gap-2 px-8 py-4 bg-blue-600 text-white text-lg font-semibold rounded-full hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-200 transition-all shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30"
+                >
+                  Find My Paint Code
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                    <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
+                  </svg>
+                </button>
+
+                {/* Laser Scanner Beam - shoots downward when scanning */}
+                {isScanning && (
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 w-32 h-48 pointer-events-none z-50">
+                    {/* Core laser beam */}
+                    <div className="absolute inset-0 bg-gradient-to-b from-blue-500/80 via-cyan-400/60 to-transparent animate-laser-scan" />
+
+                    {/* Bright center line */}
+                    <div className="absolute left-1/2 -translate-x-1/2 w-1 h-full bg-gradient-to-b from-white via-cyan-300 to-transparent animate-laser-pulse" />
+
+                    {/* Side scanning lines */}
+                    <div className="absolute left-[30%] w-0.5 h-full bg-gradient-to-b from-blue-400/50 to-transparent animate-laser-scan" style={{ animationDelay: '0.1s' }} />
+                    <div className="absolute right-[30%] w-0.5 h-full bg-gradient-to-b from-blue-400/50 to-transparent animate-laser-scan" style={{ animationDelay: '0.2s' }} />
+
+                    {/* Glow effect */}
+                    <div className="absolute inset-0 bg-gradient-to-b from-blue-400/40 to-transparent blur-md animate-laser-glow" />
+                  </div>
+                )}
+              </div>
 
               {/* Animated Cars */}
-              <HeroAnimation />
+              <HeroAnimation onScanningChange={setIsScanning} />
             </div>
 
             {/* How it Works Section */}

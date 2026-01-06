@@ -7,6 +7,7 @@ import { PaintLocationSection } from '@/components/PaintLocationSection';
 import { EraPaintsVideoSection } from '@/components/EraPaintsVideoSection';
 import { EraPaintsArticleSection } from '@/components/EraPaintsArticleSection';
 import ColorSwatch from '@/components/ColorSwatch';
+import { ProductPurchaseSection } from '@/components/ProductPurchaseSection';
 import type { PaintCodeHex } from '@/types';
 
 interface PageProps {
@@ -132,13 +133,39 @@ export default async function PaintCodeResultPage({ params, searchParams }: Page
     paintCode = paintCodeFromDb as any; // Type cast to avoid conflicts with old PaintCode interface
   }
 
-  // If still not found, create a fallback paint code object from AI-detected data
+  // If still not found, try web research to get accurate color data
+  let researchedColor = null;
+  if (!paintCode && !paintCodeFromDb && !hexFromUrl) {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const researchResponse = await fetch(`${apiUrl}/api/research-paint-color`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          brand: brand.name,
+          paintCode: paintCodeSlug.toUpperCase().replace(/-/g, ' '),
+        }),
+        cache: 'force-cache', // Cache research results
+      });
+
+      const researchData = await researchResponse.json();
+      if (researchData.success && researchData.color) {
+        researchedColor = researchData.color;
+        console.log('[PAINT-COLOR] Web research succeeded:', researchedColor.name);
+      }
+    } catch (error) {
+      console.error('[PAINT-COLOR] Web research failed:', error);
+      // Continue without researched color - will use fallback
+    }
+  }
+
+  // If still not found, create a fallback paint code object from AI-detected data or researched data
   // This allows the page to work with paint codes not in our database
   if (!paintCode) {
     paintCode = {
       code: paintCodeSlug.toUpperCase().replace(/-/g, ' '),
-      name: 'AI-Detected Color',
-      hex: hexFromUrl,
+      name: researchedColor?.name || 'AI-Detected Color',
+      hex: researchedColor?.hexBase || hexFromUrl,
     } as any; // Type cast for AI-detected colors without full RGB data
   }
 
@@ -177,10 +204,17 @@ export default async function PaintCodeResultPage({ params, searchParams }: Page
     }
   })() : null;
 
-  // Use hex color from URL if provided, otherwise use from database
+  // Use hex color from URL if provided, otherwise use from database or researched color
   // Use base color from new database if available
-  const hexColorRaw = hexFromUrl || paintCodeFromDb?.hex.base || paintCode?.hex;
+  const hexColorRaw = hexFromUrl || researchedColor?.hexBase || paintCodeFromDb?.hex.base || paintCode?.hex;
   const hexColor = typeof hexColorRaw === 'string' ? hexColorRaw : (hexColorRaw as PaintCodeHex)?.base;
+
+  // Create simple RGB object from researched color for swatch rendering
+  const researchedColorRgb = researchedColor?.rgbBase ? {
+    highlight: researchedColor.rgbBase,
+    base: researchedColor.rgbBase,
+    shadow: researchedColor.rgbBase,
+  } : null;
 
   // Build Amazon link from ASIN (example format)
   // In production, this would come from your CSV data with actual ASINs
@@ -226,12 +260,12 @@ export default async function PaintCodeResultPage({ params, searchParams }: Page
             <div className="bg-gradient-to-br from-blue-50/50 via-purple-50/30 to-pink-50/50 border border-blue-100/50 rounded-3xl p-8 md:p-10 shadow-sm">
               <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
                 {/* Color Swatch */}
-                {(paintCodeFromDb?.hex || hexColor) && (
+                {(paintCodeFromDb?.hex || researchedColorRgb || hexColor) && (
                   <div className="relative flex-shrink-0">
-                    {/* Use 3D gradient swatch if database entry available */}
-                    {paintCodeFromDb?.hex ? (
+                    {/* Use 3D gradient swatch if database entry or researched color available */}
+                    {(paintCodeFromDb?.hex || researchedColorRgb) ? (
                       <div className="relative">
-                        <ColorSwatch hex={paintCodeFromDb.hex} size={128} showBorder={true} />
+                        <ColorSwatch hex={paintCodeFromDb?.hex || researchedColorRgb!} size={128} showBorder={true} />
                         <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center ring-2 ring-gray-200">
                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-6 h-6 text-green-500">
                             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
@@ -239,7 +273,7 @@ export default async function PaintCodeResultPage({ params, searchParams }: Page
                         </div>
                       </div>
                     ) : (
-                      /* Fallback to simple square swatch for AI-detected colors */
+                      /* Fallback to simple square swatch for AI-detected colors without research */
                       <div>
                         <div
                           className="w-28 h-28 md:w-32 md:h-32 rounded-2xl shadow-xl border-4 border-white ring-1 ring-gray-200"
@@ -344,126 +378,7 @@ export default async function PaintCodeResultPage({ params, searchParams }: Page
 
           {/* Right Column - Purchase Options */}
           <div className="lg:col-span-1">
-            <div className="sticky top-24 space-y-6">
-              {/* Main Purchase Card */}
-              <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl p-6 text-white shadow-xl shadow-blue-500/20">
-                <div className="flex items-center gap-2 mb-4">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-                    <path d="M10.464 8.746c.227-.18.497-.311.786-.394v2.795a2.252 2.252 0 01-.786-.393c-.394-.313-.546-.681-.546-1.004 0-.323.152-.691.546-1.004zM12.75 15.662v-2.824c.347.085.664.228.921.421.427.32.579.686.579.991 0 .305-.152.671-.579.991a2.534 2.534 0 01-.921.42z" />
-                    <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM12.75 6a.75.75 0 00-1.5 0v.816a3.836 3.836 0 00-1.72.756c-.712.566-1.112 1.35-1.112 2.178 0 .829.4 1.612 1.113 2.178.502.4 1.102.647 1.719.756v2.978a2.536 2.536 0 01-.921-.421l-.879-.66a.75.75 0 00-.9 1.2l.879.66c.533.4 1.169.645 1.821.75V18a.75.75 0 001.5 0v-.81a4.124 4.124 0 001.821-.749c.745-.559 1.179-1.344 1.179-2.191 0-.847-.434-1.632-1.179-2.191a4.122 4.122 0 00-1.821-.75V8.354c.29.082.559.213.786.393l.415.33a.75.75 0 00.933-1.175l-.415-.33a3.836 3.836 0 00-1.719-.755V6z" clipRule="evenodd" />
-                  </svg>
-                  <h3 className="text-lg font-bold">Buy Touch-Up Paint</h3>
-                </div>
-                <p className="text-blue-100 text-sm mb-6">Professional-grade paint, guaranteed factory match</p>
-
-                {/* ERA Paints Primary CTA */}
-                <a
-                  href={paintCode.purchaseLinks?.erapaints || amazonLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full mb-4 px-6 py-4 bg-white text-blue-600 rounded-xl font-bold text-center hover:bg-blue-50 transition-all shadow-lg hover:shadow-xl hover:scale-105 transform"
-                >
-                  <div className="flex items-center justify-center gap-2">
-                    <span>Shop ERA Paints</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                      <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <p className="text-xs text-blue-500 mt-1 font-normal">Recommended • Fast Shipping</p>
-                </a>
-
-                {/* Product Options */}
-                <div className="space-y-3">
-                  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-semibold">Touch-Up Pen</span>
-                      <span className="text-sm font-bold">$14.99</span>
-                    </div>
-                    <p className="text-xs text-blue-100">Perfect for small chips and scratches</p>
-                  </div>
-                  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-semibold">Aerosol Spray Can</span>
-                      <span className="text-sm font-bold">$29.99</span>
-                    </div>
-                    <p className="text-xs text-blue-100">Best for larger areas and panels</p>
-                  </div>
-                  <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-semibold">Complete Kit</span>
-                      <span className="text-sm font-bold">$39.99</span>
-                    </div>
-                    <p className="text-xs text-blue-100">Includes clear coat and applicator</p>
-                  </div>
-                </div>
-
-                {/* Trust Badges */}
-                <div className="mt-6 pt-6 border-t border-white/20 space-y-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-blue-200">
-                      <path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-blue-100">Color Match Guarantee</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-blue-200">
-                      <path d="M1 8.25a1.25 1.25 0 112.5 0v7.5a1.25 1.25 0 11-2.5 0v-7.5zM11 3V1.7c0-.268.14-.526.395-.607A2 2 0 0114 3c0 .995-.182 1.948-.514 2.826-.204.54.166 1.174.744 1.174h2.52c1.243 0 2.261 1.01 2.146 2.247a23.864 23.864 0 01-1.341 5.974C17.153 16.323 16.072 17 14.9 17h-3.192a3 3 0 01-1.341-.317l-2.734-1.366A3 3 0 006.292 15H5V8h.963c.685 0 1.258-.483 1.612-1.068a4.011 4.011 0 012.166-1.73c.432-.143.853-.386 1.011-.814.16-.432.248-.9.248-1.388z" />
-                    </svg>
-                    <span className="text-blue-100">1000+ 5-Star Reviews</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-blue-200">
-                      <path d="M3.105 2.289a.75.75 0 00-.826.95l1.414 4.925A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.086l-1.414 4.926a.75.75 0 00.826.95 28.896 28.896 0 0015.293-7.154.75.75 0 000-1.115A28.897 28.897 0 003.105 2.289z" />
-                    </svg>
-                    <span className="text-blue-100">Free Shipping Over $25</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Alternative Retailers */}
-              <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3">Also Available At:</h4>
-                <div className="space-y-2">
-                  <a
-                    href={paintCode.purchaseLinks?.amazon || amazonLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group"
-                  >
-                    <span className="font-medium text-gray-700">Amazon</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-gray-400 group-hover:text-gray-600 group-hover:translate-x-1 transition-transform">
-                      <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
-                    </svg>
-                  </a>
-                  <a
-                    href={paintCode.purchaseLinks?.walmart || '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group"
-                  >
-                    <span className="font-medium text-gray-700">Walmart</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-gray-400 group-hover:text-gray-600 group-hover:translate-x-1 transition-transform">
-                      <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
-                    </svg>
-                  </a>
-                </div>
-              </div>
-
-              {/* Need Help Card */}
-              <div className="bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-100 rounded-2xl p-5">
-                <h4 className="font-semibold text-gray-900 mb-2">Not the right color?</h4>
-                <p className="text-sm text-gray-600 mb-4">Our AI assistant can help you find the perfect match</p>
-                <Link
-                  href="/"
-                  className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-white border border-purple-200 text-purple-600 rounded-xl font-semibold hover:bg-purple-50 transition-colors"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                    <path fillRule="evenodd" d="M3.43 2.524A41.29 41.29 0 0110 2c2.236 0 4.43.18 6.57.524 1.437.231 2.43 1.49 2.43 2.902v5.148c0 1.413-.993 2.67-2.43 2.902a41.102 41.102 0 01-3.55.414c-.28.02-.521.18-.643.413l-1.712 3.293a.75.75 0 01-1.33 0l-1.713-3.293a.783.783 0 00-.642-.413 41.108 41.108 0 01-3.55-.414C1.993 13.245 1 11.986 1 10.574V5.426c0-1.413.993-2.67 2.43-2.902z" clipRule="evenodd" />
-                  </svg>
-                  Try Again
-                </Link>
-              </div>
-            </div>
+            <ProductPurchaseSection repairType={repairType} />
           </div>
         </div>
       </main>

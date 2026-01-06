@@ -75,23 +75,51 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const prompt = `Analyze this car photo to help identify the paint code.
+    const prompt = `STEP 1: DETERMINE IMAGE TYPE
+First, identify if this is:
+A) A VIN tag/sticker (certification label on door jamb with text, numbers, and codes)
+B) A car photo (showing the vehicle exterior/paint)
 
-Your job:
-- Identify the vehicle make (brand) and model
-- Estimate the year range based on design
-- Describe the color in detail (e.g., "metallic dark blue", "pearl white", "solid red")
-- Based on your automotive knowledge, suggest likely paint codes for this color on this vehicle
-- Rate your confidence (high/medium/low)
+STEP 2: ANALYZE BASED ON TYPE
+
+=== IF VIN TAG/STICKER (TYPE A) ===
+CRITICAL: VIN tags contain paint codes in specific locations. Look for these labels:
+- "C/TR" (Toyota/Lexus) - Format: "C/TR: 1C8 / FB13" → Paint code is 1C8 (before the /)
+- "PNT" or "Paint" - Followed by 2-3 character code
+- "EXT PNT" or "Exterior Paint Code" (Ford) - 2-digit code like UH, N1
+- "Color" or "CLR" - Followed by code
+- Manufacturer-specific formats
+
+Instructions for VIN tag:
+1. Read ALL text on the sticker carefully using OCR
+2. Identify paint code label keywords (C/TR, PNT, Paint, Color, EXT PNT)
+3. Extract the 2-3 character alphanumeric code NEXT TO these labels
+4. If you see "C/TR: XXX / YYY" - the paint code is XXX (ignore YYY, that's trim)
+5. Try to identify the manufacturer from the VIN or sticker text
+6. Provide high confidence if paint code label is clearly visible
+
+=== IF CAR PHOTO (TYPE B) ===
+- Identify the vehicle make and model
+- Estimate year range based on design
+- Describe the color in detail (e.g., "metallic dark blue", "pearl white")
+- Suggest possible paint codes based on color and vehicle
+- Provide medium/low confidence (visual estimation only)
 
 Respond in JSON format:
 {
-  "make": "string",
-  "model": "string",
-  "yearRange": "string",
+  "imageType": "vin_tag" | "car_photo",
+  "make": "string or null",
+  "model": "string or null",
+  "yearRange": "string or null",
   "colorDescription": "string",
+  "paintCode": "string or null (if found on VIN tag)",
   "possiblePaintCodes": ["array of strings"],
   "confidence": "high|medium|low",
+  "vinTagDetails": {
+    "paintCodeLabel": "which label was found (C/TR, PNT, etc)",
+    "rawTextNearCode": "text surrounding the paint code",
+    "vinNumber": "VIN if visible"
+  } | null,
   "additionalInfo": "string"
 }`;
 
