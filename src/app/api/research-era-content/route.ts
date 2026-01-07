@@ -70,11 +70,14 @@ export async function POST(request: NextRequest) {
 
     console.log('[ERA-CONTENT] Researching for:', brand, model, repairType);
 
-    // Step 1: Search for ERA Paints articles
+    // Step 1: Search for ERA Paints articles (with timeout)
     const articleQuery = `site:erapaints.com ${brand} ${model} ${repairType || 'touch up paint'} automotive paint`;
 
     let articleResults: WebSearchResponse | null = null;
     try {
+      const articleController = new AbortController();
+      const articleTimeout = setTimeout(() => articleController.abort(), 8000); // 8 second timeout
+
       const articleResponse = await fetch(`${request.nextUrl.origin}/api/web-search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -83,20 +86,27 @@ export async function POST(request: NextRequest) {
           maxResults: 5,
           searchType: 'era_content'
         }),
+        signal: articleController.signal,
       });
+
+      clearTimeout(articleTimeout);
 
       if (articleResponse.ok) {
         articleResults = await articleResponse.json() as WebSearchResponse;
       }
     } catch (error) {
       console.error('[ERA-CONTENT] Article search error:', error);
+      // Continue without articles - not critical
     }
 
-    // Step 2: Search for ERA Paints YouTube videos
+    // Step 2: Search for ERA Paints YouTube videos (with timeout)
     const videoQuery = `site:youtube.com/erapaints ${repairType || 'touch up'} automotive paint ${brand}`;
 
     let videoResults: WebSearchResponse | null = null;
     try {
+      const videoController = new AbortController();
+      const videoTimeout = setTimeout(() => videoController.abort(), 8000); // 8 second timeout
+
       const videoResponse = await fetch(`${request.nextUrl.origin}/api/web-search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -105,13 +115,17 @@ export async function POST(request: NextRequest) {
           maxResults: 5,
           searchType: 'era_content'
         }),
+        signal: videoController.signal,
       });
+
+      clearTimeout(videoTimeout);
 
       if (videoResponse.ok) {
         videoResults = await videoResponse.json() as WebSearchResponse;
       }
     } catch (error) {
       console.error('[ERA-CONTENT] Video search error:', error);
+      // Continue without videos - not critical
     }
 
     // Step 3: Use AI to select the best article and video
