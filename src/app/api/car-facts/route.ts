@@ -105,6 +105,7 @@ Write in a warm, enthusiastic tone. Make the owner feel excited about their vehi
           ],
           max_tokens: MAX_TOKENS,
           temperature: 0.8, // More creative for fun facts
+          response_format: { type: 'json_object' }, // Force JSON response (no markdown)
         },
         {
           signal: controller.signal,
@@ -115,13 +116,22 @@ Write in a warm, enthusiastic tone. Make the owner feel excited about their vehi
 
       const rawFacts = response.choices[0]?.message?.content || '';
 
-      // Parse JSON response
+      // Parse JSON response - strip markdown code fences if present
       let parsedFacts;
       try {
-        parsedFacts = JSON.parse(rawFacts);
+        // Remove markdown code fences (```json ... ```) if present
+        let cleanedFacts = rawFacts.trim();
+        if (cleanedFacts.startsWith('```json')) {
+          cleanedFacts = cleanedFacts.replace(/^```json\s*/, '').replace(/```\s*$/, '');
+        } else if (cleanedFacts.startsWith('```')) {
+          cleanedFacts = cleanedFacts.replace(/^```\s*/, '').replace(/```\s*$/, '');
+        }
+
+        parsedFacts = JSON.parse(cleanedFacts.trim());
       } catch (error) {
         // Fallback if AI doesn't return proper JSON
         console.error('Failed to parse vehicle facts JSON:', error);
+        console.error('Raw response:', rawFacts);
         parsedFacts = {
           vehicleHistory: rawFacts,
           colorHeritage: '',
