@@ -80,40 +80,65 @@ export async function loadVideoDatabase(): Promise<PaintCodeVideo[]> {
     const fs = await import('fs');
     const path = await import('path');
 
-    // Try multiple potential paths for better compatibility
+    const cwd = process.cwd();
+    console.log('[VIDEO] Current working directory:', cwd);
+
+    // Try multiple potential paths for better Vercel compatibility
+    // On Vercel, files in /public are accessible from the root during build
     const possiblePaths = [
-      path.join(process.cwd(), 'paint-code-videos.csv'),
-      path.join(process.cwd(), 'public', 'paint-code-videos.csv'),
-      'paint-code-videos.csv',
+      path.join(cwd, 'public', 'paint-code-videos.csv'), // Try public folder first
+      path.join(cwd, 'paint-code-videos.csv'), // Try root
+      path.join(cwd, '.next', 'server', 'paint-code-videos.csv'), // Try .next server folder
+      './public/paint-code-videos.csv', // Relative public
+      './paint-code-videos.csv', // Relative root
     ];
 
     let csvContent = '';
     let successPath = '';
+    const attemptedPaths: string[] = [];
+    const errors: string[] = [];
 
     for (const csvPath of possiblePaths) {
+      attemptedPaths.push(csvPath);
       try {
-        csvContent = fs.readFileSync(csvPath, 'utf-8');
-        successPath = csvPath;
-        break;
+        console.log('[VIDEO] Trying path:', csvPath);
+        if (fs.existsSync(csvPath)) {
+          console.log('[VIDEO] File exists at:', csvPath);
+          csvContent = fs.readFileSync(csvPath, 'utf-8');
+          successPath = csvPath;
+          console.log('[VIDEO] Successfully read CSV, length:', csvContent.length);
+          break;
+        } else {
+          console.log('[VIDEO] File does not exist at:', csvPath);
+          errors.push(`${csvPath}: File not found`);
+        }
       } catch (err) {
-        // Try next path
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.log('[VIDEO] Error reading from', csvPath, ':', errorMsg);
+        errors.push(`${csvPath}: ${errorMsg}`);
         continue;
       }
     }
 
     if (!csvContent) {
-      console.error('[VIDEO] Failed to load CSV from any path:', possiblePaths);
-      console.error('[VIDEO] Current working directory:', process.cwd());
+      console.error('[VIDEO] FAILED to load CSV from any path');
+      console.error('[VIDEO] Attempted paths:', attemptedPaths);
+      console.error('[VIDEO] Errors:', errors);
+      console.error('[VIDEO] Directory contents:', fs.readdirSync(cwd).slice(0, 20));
+      try {
+        console.error('[VIDEO] Public folder contents:', fs.readdirSync(path.join(cwd, 'public')).slice(0, 20));
+      } catch (e) {
+        console.error('[VIDEO] Could not read public folder');
+      }
       return [];
     }
 
     videoDatabase = parseVideoCSV(csvContent);
 
-    console.log(`[VIDEO] Loaded ${videoDatabase.length} instructional videos from ${successPath}`);
+    console.log(`[VIDEO] ✓ Loaded ${videoDatabase.length} instructional videos from ${successPath}`);
     return videoDatabase;
   } catch (error) {
-    console.error('[VIDEO] Error loading video database:', error);
-    console.error('[VIDEO] Current working directory:', process.cwd());
+    console.error('[VIDEO] Unexpected error in loadVideoDatabase:', error);
     return [];
   }
 }
