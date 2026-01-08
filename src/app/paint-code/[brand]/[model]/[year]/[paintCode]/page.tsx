@@ -58,12 +58,16 @@ export async function generateMetadata({ params }: PageProps) {
     p => p.code.toLowerCase().replace(/\s+/g, '-') === paintCodeSlug.toLowerCase()
   ) || {
     code: paintCodeSlug.toUpperCase().replace(/-/g, ' '),
-    name: 'Paint Color',
+    name: '', // Empty - will be populated by web research if available
   };
 
   return {
-    title: `${paintCode.code} ${paintCode.name} - ${year} ${brand.name} ${model.name} Paint Code`,
-    description: `Find touch-up paint for your ${year} ${brand.name} ${model.name}. Paint code: ${paintCode.code} (${paintCode.name}). Buy from ERAPAINTS and other trusted retailers.`,
+    title: paintCode.name
+      ? `${paintCode.code} ${paintCode.name} - ${year} ${brand.name} ${model.name} Paint Code`
+      : `${paintCode.code} - ${year} ${brand.name} ${model.name} Paint Code`,
+    description: paintCode.name
+      ? `Find touch-up paint for your ${year} ${brand.name} ${model.name}. Paint code: ${paintCode.code} (${paintCode.name}). Buy from ERAPAINTS and other trusted retailers.`
+      : `Find touch-up paint for your ${year} ${brand.name} ${model.name}. Paint code: ${paintCode.code}. Buy from ERAPAINTS and other trusted retailers.`,
   };
 }
 
@@ -136,11 +140,9 @@ export default async function PaintCodeResultPage({ params, searchParams }: Page
   }
 
   // If still not found, try web research to get accurate color data
-  // Also research if we only have a generic fallback name
+  // Also research if we don't have a color name yet
   let researchedColor = null;
-  const hasRealColorName = paintCode && paintCode.name &&
-    paintCode.name !== 'Paint Color' &&
-    paintCode.name !== 'Color Name Not Available';
+  const hasRealColorName = paintCode && paintCode.name && paintCode.name.trim() !== '';
 
   if (!hasRealColorName && !paintCodeFromDb && !hexFromUrl) {
     console.log('[PAINT-COLOR] Paint code not in database, attempting web research for:', paintCodeSlug);
@@ -191,7 +193,7 @@ export default async function PaintCodeResultPage({ params, searchParams }: Page
     // Create fallback paint code object if still not found
     paintCode = {
       code: paintCodeSlug.toUpperCase().replace(/-/g, ' '),
-      name: researchedColor?.name || 'Color Name Not Available',
+      name: researchedColor?.name || '', // Empty string - don't show placeholder text
       hex: researchedColor?.hexBase || hexFromUrl || '#808080', // Default to gray if no color found
     } as any; // Type cast for researched colors without full RGB data
   }
@@ -326,7 +328,9 @@ export default async function PaintCodeResultPage({ params, searchParams }: Page
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-blue-600 mb-2 uppercase tracking-wide">Your Paint Code</p>
                   <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-3 tracking-tight">{paintCode.code}</h2>
-                  <p className="text-xl md:text-2xl text-gray-700 font-medium mb-4">{paintCode.name}</p>
+                  {paintCode.name && (
+                    <p className="text-xl md:text-2xl text-gray-700 font-medium mb-4">{paintCode.name}</p>
+                  )}
                   <div className="flex flex-wrap gap-2">
                     <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/80 border border-blue-200 rounded-full text-sm font-medium text-gray-700">
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-blue-600">
