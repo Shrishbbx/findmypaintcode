@@ -46,6 +46,7 @@ export function FunFacts({ brand, model, year, paintCode, colorName }: FunFactsP
         }
       } catch (err) {
         console.error('Failed to fetch facts and history:', err);
+        console.error('This usually means the OPENAI_API_KEY environment variable is not set in production.');
         setError(true);
       } finally {
         setLoading(false);

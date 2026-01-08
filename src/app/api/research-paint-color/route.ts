@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
 import { rateLimit, getClientIp } from '@/lib/rateLimit';
 import { SECURITY_HEADERS } from '@/lib/security';
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 // Rate limit: 5 requests per minute (expensive operation)
 const RATE_LIMIT = {
   interval: 60 * 1000,
   uniqueTokenPerInterval: 5,
 };
+
+// Initialize OpenAI client
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY || '',
+});
 
 /**
  * API Route: /api/research-paint-color
@@ -39,10 +42,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if OpenAI API key is configured
+    if (!process.env.OPENAI_API_KEY) {
+      console.error('[PAINT-COLOR-RESEARCH] OPENAI_API_KEY is not configured');
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Web research service not configured. Please add OPENAI_API_KEY to environment variables.',
+        },
+        { status: 503, headers: SECURITY_HEADERS }
+      );
+    }
+
     console.log('[PAINT-COLOR-RESEARCH] Researching:', brand, paintCode);
 
-    // Step 1: Search the web for paint code information
-    const searchQuery = `${brand} paint code ${paintCode} color RGB hex`;
+    // Step 1: Search the web for paint code information using Google Custom Search
+    const searchQuery = `${brand} paint code ${paintCode} color name`;
 
     const searchResponse = await fetch(`${request.nextUrl.origin}/api/web-search`, {
       method: 'POST',
@@ -52,24 +67,35 @@ export async function POST(request: NextRequest) {
 
     const searchData = await searchResponse.json();
 
+    console.log('[PAINT-COLOR-RESEARCH] Search response status:', searchResponse.status);
+    console.log('[PAINT-COLOR-RESEARCH] Search data:', JSON.stringify(searchData, null, 2));
+
     if (!searchData.success || !searchData.results || searchData.results.length === 0) {
-      console.log('[PAINT-COLOR-RESEARCH] No search results found');
+      console.error('[PAINT-COLOR-RESEARCH] No search results found');
+      console.error('[PAINT-COLOR-RESEARCH] Search error:', searchData.error);
       return NextResponse.json({
         success: false,
-        error: 'No color information found online',
+        error: searchData.error || 'No color information found online',
       }, { headers: SECURITY_HEADERS });
     }
 
-    // Step 2: Use AI to extract color information from search results
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-
+    // Step 2: Use OpenAI to extract color information from search results
     const searchResultsText = searchData.results
       .map((r: { title: string; snippet: string; url: string }) =>
         `Title: ${r.title}\nSnippet: ${r.snippet}\nURL: ${r.url}`
       )
       .join('\n\n');
 
-    const prompt = `You are a color extraction expert. Analyze these search results about the ${brand} paint code ${paintCode} and extract the EXACT color information.
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a color extraction expert specializing in automotive paint codes. Extract exact color information from search results.'
+        },
+        {
+          role: 'user',
+          content: `Analyze these search results about the ${brand} paint code ${paintCode} and extract the EXACT color information.
 
 Search Results:
 ${searchResultsText}
@@ -84,30 +110,35 @@ Extract and return ONLY a JSON object with this exact structure:
   "source": "Which URL had the most reliable info"
 }
 
-Rules:
+IMPORTANT Rules:
 1. Return ONLY valid JSON, no other text
 2. If color found: set found=true and include all fields
 3. If no reliable color found: set found=false
 4. Prefer official manufacturer sources (${brand.toLowerCase()}.com, automotive databases)
 5. hexBase must be uppercase 6-digit hex code starting with #
-6. rgbBase must be array of 3 integers between 0-255`;
+6. rgbBase must be array of 3 integers between 0-255
+7. For metallic colors, estimate a representative base color value`
+        }
+      ],
+      temperature: 0.3, // Low temperature for accurate extraction
+      response_format: { type: 'json_object' }
+    });
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
+    const responseText = completion.choices[0]?.message?.content || '';
 
     console.log('[PAINT-COLOR-RESEARCH] AI Response:', responseText);
 
-    // Parse AI response
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error('[PAINT-COLOR-RESEARCH] Failed to extract JSON from AI response');
+    // Parse AI response (OpenAI with json_object format returns valid JSON directly)
+    let colorData;
+    try {
+      colorData = JSON.parse(responseText);
+    } catch (error) {
+      console.error('[PAINT-COLOR-RESEARCH] Failed to parse JSON from AI response:', error);
       return NextResponse.json({
         success: false,
         error: 'Failed to parse color information',
       }, { headers: SECURITY_HEADERS });
     }
-
-    const colorData = JSON.parse(jsonMatch[0]);
 
     if (!colorData.found) {
       return NextResponse.json({

@@ -22,8 +22,8 @@ export function Loading() {
               key={i}
               className={`w-3 h-3 ${color.bg} rounded-full animate-drip shadow-lg`}
               style={{
-                animationDelay: `${i * 0.45}s`,
-                animationDuration: '1.8s',
+                animationDelay: `${i * 0.225}s`,
+                animationDuration: '0.9s',
               }}
             />
           ))}
@@ -39,108 +39,21 @@ export function Loading() {
                 className="h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent animate-speed-line"
                 style={{
                   width: `${40 - i * 5}px`,
-                  animationDelay: `${i * 0.1}s`,
+                  animationDelay: `${i * 0.05}s`,
                   opacity: 0.6 - i * 0.1,
                 }}
               />
             ))}
           </div>
 
-          {/* Clean Sports Car Icon - Minimalistic Style */}
-          <svg
-            width="200"
-            height="100"
-            viewBox="0 0 200 100"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            className="drop-shadow-lg relative z-10"
-          >
-            {/* Simple Sports Car Body */}
-            <g>
-              {/* Main car body - single rounded shape */}
-              <path
-                d="M 30 65 Q 30 55 40 50 L 60 45 Q 70 42 85 42 L 110 42 Q 120 42 130 45 L 150 50 Q 160 55 160 65 L 160 70 L 30 70 Z"
-                className="fill-gray-200 stroke-none transition-all duration-1000 animate-paint-fill"
-              />
-
-              {/* Roof/Cabin area */}
-              <path
-                d="M 70 42 Q 75 35 85 32 L 110 32 Q 120 35 125 42 Z"
-                className="fill-gray-200 stroke-none transition-all duration-1000 animate-paint-fill"
-              />
-
-              {/* Windshield */}
-              <path
-                d="M 75 38 L 80 33 L 95 33 L 98 38 Z"
-                className="fill-gray-700 fill-opacity-20"
-              />
-
-              {/* Side window */}
-              <path
-                d="M 105 38 L 108 33 L 118 33 L 120 38 Z"
-                className="fill-gray-700 fill-opacity-20"
-              />
-
-              {/* Bottom shadow/ground line */}
-              <ellipse
-                cx="95"
-                cy="72"
-                rx="70"
-                ry="4"
-                className="fill-gray-900 fill-opacity-10"
-              />
-            </g>
-
-            {/* Wheels - Simple circles */}
-            <g>
-              {/* Front wheel */}
-              <circle
-                cx="60"
-                cy="70"
-                r="12"
-                className="fill-gray-900"
-              />
-              <circle
-                cx="60"
-                cy="70"
-                r="8"
-                className="fill-gray-700"
-              />
-              <circle
-                cx="60"
-                cy="70"
-                r="3"
-                className="fill-gray-900"
-              />
-
-              {/* Rear wheel */}
-              <circle
-                cx="130"
-                cy="70"
-                r="12"
-                className="fill-gray-900"
-              />
-              <circle
-                cx="130"
-                cy="70"
-                r="8"
-                className="fill-gray-700"
-              />
-              <circle
-                cx="130"
-                cy="70"
-                r="3"
-                className="fill-gray-900"
-              />
-            </g>
-
-            {/* Paint brush stroke effect */}
-            <path
-              d="M 15 60 L 180 60"
-              className="stroke-blue-500 stroke-2 opacity-0 animate-brush-stroke"
-              strokeLinecap="round"
-            />
-          </svg>
+          {/* Car SVG from public folder */}
+          <img
+            src="/cars/car-2.svg"
+            alt="Car loading animation"
+            width="150"
+            height="75"
+            className="drop-shadow-lg relative z-10 animate-hue-rotate"
+          />
 
           {/* Sparkle effects */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
@@ -151,7 +64,7 @@ export function Loading() {
                 style={{
                   left: `${Math.cos((i * Math.PI) / 2) * 60}px`,
                   top: `${Math.sin((i * Math.PI) / 2) * 40}px`,
-                  animationDelay: `${i * 0.2}s`,
+                  animationDelay: `${i * 0.1}s`,
                 }}
               />
             ))}
@@ -169,8 +82,8 @@ export function Loading() {
                 key={i}
                 className={`w-2.5 h-2.5 ${color.bg} rounded-full animate-bounce`}
                 style={{
-                  animationDelay: `${i * 0.15}s`,
-                  animationDuration: '0.6s',
+                  animationDelay: `${i * 0.075}s`,
+                  animationDuration: '0.3s',
                 }}
               />
             ))}
@@ -260,24 +173,37 @@ export function Loading() {
           }
         }
 
+        @keyframes hue-rotate {
+          0% {
+            filter: hue-rotate(0deg) drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+          }
+          100% {
+            filter: hue-rotate(360deg) drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1));
+          }
+        }
+
         .animate-drip {
           animation: drip infinite;
         }
 
         .animate-paint-fill {
-          animation: paint-fill 3.5s ease-in-out infinite;
+          animation: paint-fill 1.75s ease-in-out infinite;
         }
 
         .animate-brush-stroke {
-          animation: brush-stroke 3.5s ease-in-out infinite;
+          animation: brush-stroke 1.75s ease-in-out infinite;
         }
 
         .animate-sparkle {
-          animation: sparkle 1.5s ease-in-out infinite;
+          animation: sparkle 0.75s ease-in-out infinite;
         }
 
         .animate-speed-line {
-          animation: speed-line 0.8s ease-out infinite;
+          animation: speed-line 0.4s ease-out infinite;
+        }
+
+        .animate-hue-rotate {
+          animation: hue-rotate 3s linear infinite;
         }
       `}</style>
     </div>

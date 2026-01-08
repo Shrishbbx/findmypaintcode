@@ -2,12 +2,14 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getBrandBySlug, getModelByName, getPaintCodeByCode, getAllPaintCodePaths } from '@/data/paint-codes';
 import { findPaintCode } from '@/lib/paintDatabase';
+import { loadVideoDatabase, getVideoByBrand } from '@/lib/video-helpers';
 import { FunFacts } from '@/components/FunFacts';
 import { PaintLocationSection } from '@/components/PaintLocationSection';
 import { EraPaintsVideoSection } from '@/components/EraPaintsVideoSection';
 import { EraPaintsArticleSection } from '@/components/EraPaintsArticleSection';
 import ColorSwatch from '@/components/ColorSwatch';
 import { ProductPurchaseSection } from '@/components/ProductPurchaseSection';
+import { YouTubeEmbed } from '@/components/ui/YouTubeEmbed';
 import type { PaintCodeHex } from '@/types';
 
 interface PageProps {
@@ -56,7 +58,7 @@ export async function generateMetadata({ params }: PageProps) {
     p => p.code.toLowerCase().replace(/\s+/g, '-') === paintCodeSlug.toLowerCase()
   ) || {
     code: paintCodeSlug.toUpperCase().replace(/-/g, ' '),
-    name: 'AI-Detected Color',
+    name: 'Paint Color',
   };
 
   return {
@@ -134,8 +136,14 @@ export default async function PaintCodeResultPage({ params, searchParams }: Page
   }
 
   // If still not found, try web research to get accurate color data
+  // Also research if we only have a generic fallback name
   let researchedColor = null;
-  if (!paintCode && !paintCodeFromDb && !hexFromUrl) {
+  const hasRealColorName = paintCode && paintCode.name &&
+    paintCode.name !== 'Paint Color' &&
+    paintCode.name !== 'Color Name Not Available';
+
+  if (!hasRealColorName && !paintCodeFromDb && !hexFromUrl) {
+    console.log('[PAINT-COLOR] Paint code not in database, attempting web research for:', paintCodeSlug);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
       const researchResponse = await fetch(`${apiUrl}/api/research-paint-color`, {
@@ -145,28 +153,47 @@ export default async function PaintCodeResultPage({ params, searchParams }: Page
           brand: brand.name,
           paintCode: paintCodeSlug.toUpperCase().replace(/-/g, ' '),
         }),
-        cache: 'force-cache', // Cache research results
+        cache: 'no-store', // Don't cache during development
       });
 
       const researchData = await researchResponse.json();
+      console.log('[PAINT-COLOR] Research API response:', JSON.stringify(researchData, null, 2));
+      console.log('[PAINT-COLOR] Response status:', researchResponse.status);
+
       if (researchData.success && researchData.color) {
         researchedColor = researchData.color;
-        console.log('[PAINT-COLOR] Web research succeeded:', researchedColor.name);
+        console.log('[PAINT-COLOR] ✓ Web research succeeded! Found color:', researchedColor.name);
+      } else {
+        console.error('[PAINT-COLOR] ✗ Web research failed:', researchData.error || 'No color data returned');
+        console.error('[PAINT-COLOR] Full error response:', JSON.stringify(researchData, null, 2));
       }
     } catch (error) {
-      console.error('[PAINT-COLOR] Web research failed:', error);
+      console.error('[PAINT-COLOR] ✗ Web research request failed:', error);
       // Continue without researched color - will use fallback
     }
+  } else {
+    console.log('[PAINT-COLOR] Skipping web research - using existing data:', {
+      hasPaintCode: !!paintCode,
+      hasPaintCodeFromDb: !!paintCodeFromDb,
+      hasHexFromUrl: !!hexFromUrl
+    });
   }
 
-  // If still not found, create a fallback paint code object from AI-detected data or researched data
-  // This allows the page to work with paint codes not in our database
-  if (!paintCode) {
+  // Update paintCode with researched data if we got better information
+  if (researchedColor && paintCode) {
+    // Update existing paintCode with researched data
+    paintCode = {
+      ...paintCode,
+      name: researchedColor.name,
+      hex: researchedColor.hexBase,
+    } as any;
+  } else if (!paintCode) {
+    // Create fallback paint code object if still not found
     paintCode = {
       code: paintCodeSlug.toUpperCase().replace(/-/g, ' '),
-      name: researchedColor?.name || 'AI-Detected Color',
-      hex: researchedColor?.hexBase || hexFromUrl,
-    } as any; // Type cast for AI-detected colors without full RGB data
+      name: researchedColor?.name || 'Color Name Not Available',
+      hex: researchedColor?.hexBase || hexFromUrl || '#808080', // Default to gray if no color found
+    } as any; // Type cast for researched colors without full RGB data
   }
 
   // At this point, paintCode is guaranteed to be defined (either from DB or fallback)
@@ -204,17 +231,26 @@ export default async function PaintCodeResultPage({ params, searchParams }: Page
     }
   })() : null;
 
+  // Load brand-specific instructional video
+  const videos = await loadVideoDatabase();
+  const brandVideo = getVideoByBrand(videos, brand.name);
+
   // Use hex color from URL if provided, otherwise use from database or researched color
   // Use base color from new database if available
   const hexColorRaw = hexFromUrl || researchedColor?.hexBase || paintCodeFromDb?.hex.base || paintCode?.hex;
   const hexColor = typeof hexColorRaw === 'string' ? hexColorRaw : (hexColorRaw as PaintCodeHex)?.base;
 
-  // Create simple RGB object from researched color for swatch rendering
+  // Create RGB object from researched color for swatch rendering
+  // If we have researched color with RGB, use it. Otherwise, we'll fall back to hex
   const researchedColorRgb = researchedColor?.rgbBase ? {
     highlight: researchedColor.rgbBase,
     base: researchedColor.rgbBase,
     shadow: researchedColor.rgbBase,
   } : null;
+
+  // Determine if we should show the 3D gradient swatch or simple swatch
+  const has3DSwatchData = paintCodeFromDb?.hex || researchedColorRgb;
+  const hasSimpleSwatchData = hexColor && !has3DSwatchData;
 
   // Build Amazon link from ASIN (example format)
   // In production, this would come from your CSV data with actual ASINs
@@ -259,35 +295,33 @@ export default async function PaintCodeResultPage({ params, searchParams }: Page
             {/* Paint Code Hero Card */}
             <div className="bg-gradient-to-br from-blue-50/50 via-purple-50/30 to-pink-50/50 border border-blue-100/50 rounded-3xl p-8 md:p-10 shadow-sm">
               <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
-                {/* Color Swatch */}
-                {(paintCodeFromDb?.hex || researchedColorRgb || hexColor) && (
-                  <div className="relative flex-shrink-0">
-                    {/* Use 3D gradient swatch if database entry or researched color available */}
-                    {(paintCodeFromDb?.hex || researchedColorRgb) ? (
-                      <div className="relative">
-                        <ColorSwatch hex={paintCodeFromDb?.hex || researchedColorRgb!} size={128} showBorder={true} />
-                        <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center ring-2 ring-gray-200">
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-6 h-6 text-green-500">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
-                          </svg>
-                        </div>
+                {/* Color Swatch - Always show if we have any color data */}
+                <div className="relative flex-shrink-0">
+                  {/* Use 3D gradient swatch if database entry or researched color available */}
+                  {has3DSwatchData ? (
+                    <div className="relative">
+                      <ColorSwatch hex={paintCodeFromDb?.hex || researchedColorRgb!} size={128} showBorder={true} />
+                      <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center ring-2 ring-gray-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-6 h-6 text-green-500">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
+                        </svg>
                       </div>
-                    ) : (
-                      /* Fallback to simple square swatch for AI-detected colors without research */
-                      <div>
-                        <div
-                          className="w-28 h-28 md:w-32 md:h-32 rounded-2xl shadow-xl border-4 border-white ring-1 ring-gray-200"
-                          style={{ backgroundColor: hexColor }}
-                        />
-                        <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center">
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-6 h-6 text-green-500">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
-                          </svg>
-                        </div>
+                    </div>
+                  ) : (
+                    /* Fallback to simple square swatch for colors with only hex data */
+                    <div className="relative">
+                      <div
+                        className="w-28 h-28 md:w-32 md:h-32 rounded-2xl shadow-xl border-4 border-white ring-1 ring-gray-200"
+                        style={{ backgroundColor: hexColor || '#808080' }}
+                      />
+                      <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center ring-2 ring-gray-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-6 h-6 text-green-500">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
+                        </svg>
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
 
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-blue-600 mb-2 uppercase tracking-wide">Your Paint Code</p>
@@ -345,6 +379,22 @@ export default async function PaintCodeResultPage({ params, searchParams }: Page
                     </div>
                   ))}
                 </div>
+
+                {/* Brand-specific instructional video */}
+                {brandVideo && (
+                  <div className="mt-6 pt-6 border-t border-gray-200">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-blue-600">
+                        <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" />
+                      </svg>
+                      Video Guide: How to Find Your {brand.name} Paint Code
+                    </h4>
+                    <YouTubeEmbed
+                      embedUrl={brandVideo.embedUrl}
+                      title={brandVideo.title}
+                    />
+                  </div>
+                )}
               </div>
             )}
 
