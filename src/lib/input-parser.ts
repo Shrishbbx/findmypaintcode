@@ -55,7 +55,7 @@ function extractPaintCode(text: string): string | null {
 /**
  * Parse vehicle input text to extract brand, model, year, and paint code
  * Handles various formats:
- * - "Toyota Fortuner"
+ * - "Subaru Outback"
  * - "2015 Toyota Camry"
  * - "Honda Civic 2020"
  * - "Ford F-150"

@@ -20,7 +20,7 @@ const getWelcomeMessage = (): ChatMessageType => {
   return {
     id: generateId(),
     type: 'bot',
-    content: "Hi! I'm your Paint Code Expert. I'll help you find the exact paint code for your car.\n\nLet's start! What's your car brand?\n\n*You can also type your brand and model together, like 'Toyota Fortuner'*",
+    content: "Hi! I'm your Paint Code Expert. I'll help you find the exact paint code for your car.\n\nLet's start! What's your car brand?\n\n*You can also type your brand and model together, like 'Subaru Outback'*",
     timestamp: new Date(),
     options: [
       ...commonBrands.map(brand => ({
@@ -192,7 +192,7 @@ export function ChatContainer() {
     }
   }, [messages, currentChatId, saveCurrentChat]);
 
-  const addBotMessage = (content: string, options?: ChatOption[]) => {
+  const addBotMessage = (content: string, options?: ChatOption[], videoData?: { brand: string }) => {
     setMessages(prev => [
       ...prev,
       {
@@ -201,6 +201,7 @@ export function ChatContainer() {
         content,
         timestamp: new Date(),
         options,
+        videoData,
       },
     ]);
     if (options) {
@@ -981,6 +982,7 @@ export function ChatContainer() {
       }
 
       // No paint code yet - ask for VIN upload (enhanced copy from frontend-design-copywriter)
+      // Include video guide if brand is available
       addBotMessage(
         "Perfect! Now let's confirm your exact shade.\n\n" +
         "**Here's why this matters:** AI detected your color, but manufacturers often make 20-40 similar shades of the same color! " +
@@ -990,7 +992,8 @@ export function ChatContainer() {
           { label: '📷 Upload VIN Photo', value: 'upload-vin-photo' },
           { label: '🔍 I Found the Paint Code', value: 'found-paint-code' },
           { label: '❓ Where is the VIN?', value: 'where-is-vin' },
-        ]
+        ],
+        detectedInfo.brand ? { brand: detectedInfo.brand } : undefined
       );
       return;
     }
@@ -1031,7 +1034,8 @@ export function ChatContainer() {
           [
             { label: '📷 Upload VIN Photo', value: 'upload-vin-photo' },
             { label: '✍️ Type Paint Code', value: 'found-paint-code' },
-          ]
+          ],
+          brand ? { brand } : undefined
         );
       } else {
         // Fallback to generic instructions if no brand-specific data
@@ -1046,7 +1050,8 @@ export function ChatContainer() {
           [
             { label: '📷 Upload VIN Photo', value: 'upload-vin-photo' },
             { label: '✍️ Type Paint Code', value: 'found-paint-code' },
-          ]
+          ],
+          brand ? { brand } : undefined
         );
       }
       return;
@@ -1192,9 +1197,9 @@ export function ChatContainer() {
 
           {isTyping && (
             <div className="flex gap-3">
-              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-blue-600">
-                  <path d="M12 2a2 2 0 012 2v1h2a4 4 0 014 4v9a4 4 0 01-4 4H8a4 4 0 01-4-4V9a4 4 0 014-4h2V4a2 2 0 012-2zm-3 10a1.5 1.5 0 100 3 1.5 1.5 0 000-3zm6 0a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/>
+              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" className="w-5 h-5">
+                  <path d="M11.5 2a8.5 8.5 0 018.5 8.5c0 1.5-.5 3-1.3 4.2l-.2.3-6.4 6.4c-.5.5-1.2.5-1.7 0l-6.4-6.4-.2-.3A8.5 8.5 0 0111.5 2zm0 3a1.5 1.5 0 100 3 1.5 1.5 0 000-3zm-4 2a1.5 1.5 0 100 3 1.5 1.5 0 000-3zm8 0a1.5 1.5 0 100 3 1.5 1.5 0 000-3zm-4 3a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/>
                 </svg>
               </div>
               <div className="bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100">

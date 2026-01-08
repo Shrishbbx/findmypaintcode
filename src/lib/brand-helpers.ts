@@ -109,7 +109,7 @@ export function getBrandLocationData(brand: string): PaintCodeLocation | null {
 
 /**
  * Parse user input that might contain brand and model together
- * Example: "Toyota Fortuner" → { brand: "Toyota", model: "Fortuner" }
+ * Example: "Subaru Outback" → { brand: "Subaru", model: "Outback" }
  */
 export interface ParsedBrandModel {
   brand?: string;

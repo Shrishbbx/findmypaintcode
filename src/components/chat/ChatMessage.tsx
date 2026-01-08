@@ -2,6 +2,7 @@
 
 import { ChatMessage as ChatMessageType } from '@/types';
 import Link from 'next/link';
+import { VideoMessage } from './VideoMessage';
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -65,9 +66,9 @@ export function ChatMessage({ message }: ChatMessageProps) {
     <div className={`flex gap-2 sm:gap-3 ${isBot ? 'justify-start' : 'justify-end'}`}>
       {/* Bot avatar */}
       {isBot && (
-        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-1">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600">
-            <path d="M12 2a2 2 0 012 2v1h2a4 4 0 014 4v9a4 4 0 01-4 4H8a4 4 0 01-4-4V9a4 4 0 014-4h2V4a2 2 0 012-2zm-3 10a1.5 1.5 0 100 3 1.5 1.5 0 000-3zm6 0a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/>
+        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0 mt-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" className="w-4 h-4 sm:w-5 sm:h-5">
+            <path d="M11.5 2a8.5 8.5 0 018.5 8.5c0 1.5-.5 3-1.3 4.2l-.2.3-6.4 6.4c-.5.5-1.2.5-1.7 0l-6.4-6.4-.2-.3A8.5 8.5 0 0111.5 2zm0 3a1.5 1.5 0 100 3 1.5 1.5 0 000-3zm-4 2a1.5 1.5 0 100 3 1.5 1.5 0 000-3zm8 0a1.5 1.5 0 100 3 1.5 1.5 0 000-3zm-4 3a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/>
           </svg>
         </div>
       )}
@@ -92,6 +93,13 @@ export function ChatMessage({ message }: ChatMessageProps) {
               alt="Uploaded vehicle"
               className="rounded-xl max-w-full h-auto max-h-40 sm:max-h-56 object-cover"
             />
+          </div>
+        )}
+
+        {/* Video guide if present */}
+        {message.videoData && (
+          <div className="mt-3">
+            <VideoMessage brand={message.videoData.brand} />
           </div>
         )}
       </div>
