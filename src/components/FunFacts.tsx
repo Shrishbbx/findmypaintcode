@@ -80,16 +80,22 @@ export function FunFacts({ brand, model, year, paintCode, colorName }: FunFactsP
   }
 
   if (error) {
-    // Show error in development for debugging
-    if (process.env.NODE_ENV === 'development') {
-      return (
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-6 md:p-8">
-          <h3 className="text-lg font-bold text-red-900 mb-2">⚠️ Facts & History Error (Dev Mode)</h3>
-          <p className="text-sm text-red-700">Failed to load facts and history. Check console for details.</p>
+    // TEMPORARILY show error in production for debugging
+    // TODO: Change back to hiding after Vercel issue is resolved
+    return (
+      <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-6 md:p-8">
+        <div className="flex items-center gap-2 mb-2">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-yellow-600">
+            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" />
+          </svg>
+          <h3 className="text-lg font-bold text-yellow-900">Facts & History Temporarily Unavailable</h3>
         </div>
-      );
-    }
-    return null; // Gracefully hide in production
+        <p className="text-sm text-yellow-700">
+          We're experiencing technical difficulties loading vehicle history.
+          {process.env.NODE_ENV === 'development' && ' Check console for details.'}
+        </p>
+      </div>
+    );
   }
 
   return (

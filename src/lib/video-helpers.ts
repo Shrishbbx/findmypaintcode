@@ -79,15 +79,41 @@ export async function loadVideoDatabase(): Promise<PaintCodeVideo[]> {
   try {
     const fs = await import('fs');
     const path = await import('path');
-    const csvPath = path.join(process.cwd(), 'paint-code-videos.csv');
-    const csvContent = fs.readFileSync(csvPath, 'utf-8');
+
+    // Try multiple potential paths for better compatibility
+    const possiblePaths = [
+      path.join(process.cwd(), 'paint-code-videos.csv'),
+      path.join(process.cwd(), 'public', 'paint-code-videos.csv'),
+      'paint-code-videos.csv',
+    ];
+
+    let csvContent = '';
+    let successPath = '';
+
+    for (const csvPath of possiblePaths) {
+      try {
+        csvContent = fs.readFileSync(csvPath, 'utf-8');
+        successPath = csvPath;
+        break;
+      } catch (err) {
+        // Try next path
+        continue;
+      }
+    }
+
+    if (!csvContent) {
+      console.error('[VIDEO] Failed to load CSV from any path:', possiblePaths);
+      console.error('[VIDEO] Current working directory:', process.cwd());
+      return [];
+    }
 
     videoDatabase = parseVideoCSV(csvContent);
 
-    console.log(`[VIDEO] Loaded ${videoDatabase.length} instructional videos`);
+    console.log(`[VIDEO] Loaded ${videoDatabase.length} instructional videos from ${successPath}`);
     return videoDatabase;
   } catch (error) {
     console.error('[VIDEO] Error loading video database:', error);
+    console.error('[VIDEO] Current working directory:', process.cwd());
     return [];
   }
 }
