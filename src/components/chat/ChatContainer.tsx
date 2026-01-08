@@ -192,7 +192,7 @@ export function ChatContainer() {
     }
   }, [messages, currentChatId, saveCurrentChat]);
 
-  const addBotMessage = (content: string, options?: ChatOption[], videoData?: { brand: string }) => {
+  const addBotMessage = (content: string, options?: ChatOption[]) => {
     setMessages(prev => [
       ...prev,
       {
@@ -201,7 +201,6 @@ export function ChatContainer() {
         content,
         timestamp: new Date(),
         options,
-        videoData,
       },
     ]);
     if (options) {
@@ -982,7 +981,6 @@ export function ChatContainer() {
       }
 
       // No paint code yet - ask for VIN upload (enhanced copy from frontend-design-copywriter)
-      // Include video guide if brand is available
       addBotMessage(
         "Perfect! Now let's confirm your exact shade.\n\n" +
         "**Here's why this matters:** AI detected your color, but manufacturers often make 20-40 similar shades of the same color! " +
@@ -992,8 +990,7 @@ export function ChatContainer() {
           { label: '📷 Upload VIN Photo', value: 'upload-vin-photo' },
           { label: '🔍 I Found the Paint Code', value: 'found-paint-code' },
           { label: '❓ Where is the VIN?', value: 'where-is-vin' },
-        ],
-        detectedInfo.brand ? { brand: detectedInfo.brand } : undefined
+        ]
       );
       return;
     }
@@ -1034,8 +1031,7 @@ export function ChatContainer() {
           [
             { label: '📷 Upload VIN Photo', value: 'upload-vin-photo' },
             { label: '✍️ Type Paint Code', value: 'found-paint-code' },
-          ],
-          brand ? { brand } : undefined
+          ]
         );
       } else {
         // Fallback to generic instructions if no brand-specific data
@@ -1050,8 +1046,7 @@ export function ChatContainer() {
           [
             { label: '📷 Upload VIN Photo', value: 'upload-vin-photo' },
             { label: '✍️ Type Paint Code', value: 'found-paint-code' },
-          ],
-          brand ? { brand } : undefined
+          ]
         );
       }
       return;
