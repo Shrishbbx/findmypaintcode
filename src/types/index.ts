@@ -84,6 +84,10 @@ export interface ChatMessage {
   options?: ChatOption[];
   // For image upload messages
   imageUrl?: string;
+  // For video instructional content
+  videoData?: {
+    brand: string;
+  };
 }
 
 export interface ChatOption {

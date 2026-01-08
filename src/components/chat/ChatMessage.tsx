@@ -2,6 +2,7 @@
 
 import { ChatMessage as ChatMessageType } from '@/types';
 import Link from 'next/link';
+import { VideoMessage } from './VideoMessage';
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -92,6 +93,13 @@ export function ChatMessage({ message }: ChatMessageProps) {
               alt="Uploaded vehicle"
               className="rounded-xl max-w-full h-auto max-h-40 sm:max-h-56 object-cover"
             />
+          </div>
+        )}
+
+        {/* Video guide if present */}
+        {message.videoData && (
+          <div className="mt-3">
+            <VideoMessage brand={message.videoData.brand} />
           </div>
         )}
       </div>
